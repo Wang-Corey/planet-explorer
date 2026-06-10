@@ -17,6 +17,8 @@ export const PLANET_TYPES = [
       [0.82, '#8f5a2e'],
     ],
     liquid: null,
+    liquidClass: null,
+    creature: { count: [4, 6], prefixes: ['Dune', 'Sand', 'Mirage', 'Sirocco'], suffixes: ['Strider', 'Loper', 'Stilt', 'Skimmer'] },
     atmosphere: '#e8a85f',
     particles: { color: '#e8c890', count: 90, size: 0.5, height: 4 },
     props: [
@@ -45,7 +47,9 @@ export const PLANET_TYPES = [
       [0.8, '#4a8f4f'],
       [0.92, '#8a9a8f'],
     ],
-    liquid: { level: 0.54, color: '#1d7fd6', opacity: 0.78, emissive: '#0a3a6a', emissiveIntensity: 0.25 },
+    liquid: { level: 0.54, color: '#1d7fd6', opacity: 0.78, basin: 1.6, emissive: '#0a3a6a', emissiveIntensity: 0.25 },
+    liquidClass: 'swim',
+    creature: { count: [4, 6], prefixes: ['Tide', 'Reef', 'Salt', 'Pearl'], suffixes: ['Scuttler', 'Pincher', 'Sidler', 'Snipper'] },
     atmosphere: '#7fc8ff',
     particles: null,
     props: [
@@ -72,7 +76,9 @@ export const PLANET_TYPES = [
       [0.68, '#6b5a7d'],
       [0.88, '#4a3a5d'],
     ],
-    liquid: { level: 0.46, color: '#9ef01a', opacity: 0.85, emissive: '#6abf0f', emissiveIntensity: 0.7 },
+    liquid: { level: 0.46, color: '#9ef01a', opacity: 0.85, basin: 1.6, emissive: '#6abf0f', emissiveIntensity: 0.7 },
+    liquidClass: 'hazard',
+    creature: { count: [3, 5], prefixes: ['Bog', 'Sludge', 'Venom', 'Murk'], suffixes: ['Slug', 'Crawler', 'Ooze', 'Lurker'] },
     atmosphere: '#a8f01a',
     particles: { color: '#c6ff4f', count: 140, size: 0.45, height: 6 },
     props: [
@@ -99,7 +105,9 @@ export const PLANET_TYPES = [
       [0.68, '#c9a0e8'],
       [0.86, '#f3d7f7'],
     ],
-    liquid: { level: 0.48, color: '#ff9ad5', opacity: 0.7, emissive: '#d65aa0', emissiveIntensity: 0.4 },
+    liquid: { level: 0.48, color: '#ff9ad5', opacity: 0.7, basin: 3, emissive: '#d65aa0', emissiveIntensity: 0.4 },
+    liquidClass: 'swim',
+    creature: { count: [5, 7], prefixes: ['Glimmer', 'Dusk', 'Petal', 'Moon'], suffixes: ['Moth', 'Flit', 'Wing', 'Dancer'] },
     atmosphere: '#f0a6ff',
     particles: { color: '#ffd6fa', count: 220, size: 0.55, height: 7 },
     props: [
@@ -127,6 +135,8 @@ export const PLANET_TYPES = [
       [0.85, '#ffffff'],
     ],
     liquid: { level: 0.42, color: '#9fd8ef', opacity: 0.9, emissive: '#3a6a8f', emissiveIntensity: 0.15 },
+    liquidClass: 'solid',
+    creature: { count: [4, 6], prefixes: ['Frost', 'Snow', 'Glacier', 'Polar'], suffixes: ['Waddler', 'Hopper', 'Puff', 'Toddler'] },
     atmosphere: '#bfe9ff',
     particles: { color: '#ffffff', count: 260, size: 0.4, height: 8 },
     props: [
@@ -154,6 +164,8 @@ export const PLANET_TYPES = [
       [0.9, '#1c1616'],
     ],
     liquid: { level: 0.4, color: '#ff5a1f', opacity: 1.0, emissive: '#ff6a00', emissiveIntensity: 1.6 },
+    liquidClass: 'hazard',
+    creature: { count: [3, 5], prefixes: ['Cinder', 'Magma', 'Ash', 'Coal'], suffixes: ['Beetle', 'Plodder', 'Shellback', 'Creeper'] },
     atmosphere: '#ff7a3f',
     particles: { color: '#ffae4f', count: 160, size: 0.5, height: 7 },
     props: [
@@ -181,7 +193,9 @@ export const PLANET_TYPES = [
       [0.72, '#4a8a3a'],
       [0.9, '#8a8f80'],
     ],
-    liquid: { level: 0.45, color: '#2a8fcf', opacity: 0.8, emissive: '#0a3a5a', emissiveIntensity: 0.2 },
+    liquid: { level: 0.45, color: '#2a8fcf', opacity: 0.8, basin: 2.2, emissive: '#0a3a5a', emissiveIntensity: 0.2 },
+    liquidClass: 'swim',
+    creature: { count: [4, 6], prefixes: ['Moss', 'Fern', 'Elder', 'Thicket'], suffixes: ['Stag', 'Grazer', 'Doe', 'Wanderer'] },
     atmosphere: '#9fd8a0',
     particles: { color: '#ffe97f', count: 90, size: 0.4, height: 5 },
     props: [
@@ -208,7 +222,9 @@ export const PLANET_TYPES = [
       [0.65, '#9a8aa8'],
       [0.85, '#b8a8c2'],
     ],
-    liquid: { level: 0.42, color: '#7f5ad6', opacity: 0.75, emissive: '#5a3aa8', emissiveIntensity: 0.5 },
+    liquid: { level: 0.46, color: '#7f5ad6', opacity: 0.75, basin: 3, emissive: '#5a3aa8', emissiveIntensity: 0.5 },
+    liquidClass: 'swim',
+    creature: { count: [4, 7], prefixes: ['Spore', 'Puff', 'Cap', 'Gill'], suffixes: ['Toad', 'Hopper', 'Bouncer', 'Croaker'] },
     atmosphere: '#c08fff',
     particles: { color: '#d6a0ff', count: 200, size: 0.5, height: 8 },
     props: [
@@ -235,7 +251,9 @@ export const PLANET_TYPES = [
       [0.68, '#ffeef7'],
       [0.86, '#d6f7ff'],
     ],
-    liquid: { level: 0.47, color: '#ff8fc0', opacity: 0.75, emissive: '#d65a90', emissiveIntensity: 0.35 },
+    liquid: { level: 0.47, color: '#ff8fc0', opacity: 0.75, basin: 3, emissive: '#d65a90', emissiveIntensity: 0.35 },
+    liquidClass: 'swim',
+    creature: { count: [4, 6], prefixes: ['Gum', 'Taffy', 'Jelly', 'Bonbon'], suffixes: ['Bear', 'Toddle', 'Chew', 'Nibbler'] },
     atmosphere: '#ffb0d8',
     particles: { color: '#fff0a0', count: 130, size: 0.45, height: 6 },
     props: [
@@ -263,6 +281,8 @@ export const PLANET_TYPES = [
       [0.85, '#7a5aa8'],
     ],
     liquid: null,
+    liquidClass: null,
+    creature: { count: [4, 6], prefixes: ['Prism', 'Facet', 'Chime', 'Shard'], suffixes: ['Jelly', 'Drifter', 'Halo', 'Wisp'] },
     atmosphere: '#7fdfff',
     particles: { color: '#9fe8ff', count: 180, size: 0.5, height: 9 },
     props: [
@@ -291,7 +311,9 @@ export const PLANET_TYPES = [
       [0.78, '#2bffd6'],
       [0.9, '#16162a'],
     ],
-    liquid: { level: 0.3, color: '#05050d', opacity: 0.95, emissive: '#1a0a2e', emissiveIntensity: 0.4 },
+    liquid: { level: 0.3, color: '#05050d', opacity: 0.95, basin: 2, emissive: '#1a0a2e', emissiveIntensity: 0.4 },
+    liquidClass: 'hazard',
+    creature: { count: [3, 5], prefixes: ['Null', 'Stray', 'Broken', 'Static'], suffixes: ['Bit', 'Swarm', 'Packet', 'Daemon'] },
     atmosphere: '#ff2bd6',
     particles: { color: '#2bffd6', count: 150, size: 0.55, height: 10 },
     props: [

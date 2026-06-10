@@ -67,6 +67,58 @@ export function playWarp() {
   osc.stop(now + 0.8);
 }
 
+export function playSplash() {
+  if (!context) return;
+  const now = context.currentTime;
+  const length = Math.floor(context.sampleRate * 0.4);
+  const buffer = context.createBuffer(1, length, context.sampleRate);
+  const samples = buffer.getChannelData(0);
+  for (let i = 0; i < length; i++) samples[i] = (Math.random() * 2 - 1) * (1 - i / length);
+  const source = context.createBufferSource();
+  source.buffer = buffer;
+  const filter = context.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(1200, now);
+  filter.frequency.exponentialRampToValueAtTime(300, now + 0.35);
+  const gain = context.createGain();
+  gain.gain.value = 0.25;
+  source.connect(filter).connect(gain).connect(context.destination);
+  source.start(now);
+}
+
+export function playBounce() {
+  if (!context) return;
+  const now = context.currentTime;
+  const osc = context.createOscillator();
+  const gain = context.createGain();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(160, now);
+  osc.frequency.exponentialRampToValueAtTime(60, now + 0.25);
+  gain.gain.setValueAtTime(0.18, now);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
+  osc.connect(gain).connect(context.destination);
+  osc.start(now);
+  osc.stop(now + 0.35);
+}
+
+export function playScan() {
+  if (!context) return;
+  const now = context.currentTime;
+  [523.25, 783.99].forEach((frequency, i) => {
+    const osc = context.createOscillator();
+    const gain = context.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = frequency;
+    const start = now + i * 0.09;
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.15, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.4);
+    osc.connect(gain).connect(context.destination);
+    osc.start(start);
+    osc.stop(start + 0.45);
+  });
+}
+
 export function setJetpack(active, boosting) {
   if (!context || !jetGain) return;
   const now = context.currentTime;

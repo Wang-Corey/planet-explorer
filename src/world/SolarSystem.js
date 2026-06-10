@@ -47,8 +47,8 @@ export class SolarSystem {
     }
   }
 
-  update(dt, elapsed) {
-    for (const planet of this.planets) planet.update(dt, elapsed);
+  update(dt, elapsed, playerWorldPosition) {
+    for (const planet of this.planets) planet.update(dt, elapsed, playerWorldPosition);
   }
 
   nearestPlanetTo(position) {
@@ -64,8 +64,8 @@ export class SolarSystem {
     return nearest;
   }
 
-  totalCollectibles() {
-    return this.planets.reduce((sum, p) => sum + p.collectibles.length, 0);
+  totalDiscoveries() {
+    return this.planets.reduce((sum, p) => sum + p.totalDiscoveryCount(), 0);
   }
 
   dispose() {

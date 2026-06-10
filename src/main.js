@@ -5,7 +5,7 @@ import { Player } from './player/Player.js';
 import { CameraRig } from './player/CameraRig.js';
 import { Hud } from './ui/hud.js';
 import { randomSeed } from './core/rng.js';
-import { initAudio, playChime, playWarp } from './core/audio.js';
+import { initAudio, playChime, playWarp, playScan } from './core/audio.js';
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -109,8 +109,23 @@ function updatePlanetPresence() {
       playChime();
       hud.addDiscovery(planet, collectedName);
     }
-    hud.updateCounts(totalCollected, system.totalCollectibles(), planet);
+    const scannedSpecies = planet.tryScan(player.position);
+    if (scannedSpecies) {
+      totalCollected++;
+      playScan();
+      hud.addDiscovery(planet, `${scannedSpecies} (creature)`);
+    }
+    hud.updateCounts(totalCollected, system.totalDiscoveries(), planet);
   }
+}
+
+function updateLiquidTint() {
+  const planet = player.planet;
+  const submerged = planet
+    && planet.type.liquid
+    && planet.type.liquidClass === 'swim'
+    && camera.position.distanceTo(planet.center) < planet.liquidRadius();
+  hud.setLiquidTint(submerged ? planet.type.liquid.color : null);
 }
 
 window.__game = { player, get system() { return system; } };
@@ -122,11 +137,13 @@ function tick() {
   const dt = Math.min(clock.getDelta(), 0.05);
   elapsed += dt;
 
-  system.update(dt, elapsed);
+  system.update(dt, elapsed, player.position);
   player.update(dt, cameraRig.forward, camera, system);
   cameraRig.update(dt, player, system);
   checkSunRescue();
   updatePlanetPresence();
+  updateLiquidTint();
+  hud.setFuel(player.fuelFraction);
 
   renderer.render(scene, camera);
   requestAnimationFrame(tick);

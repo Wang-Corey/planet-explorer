@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Planet Explorer</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>🪐</text></svg>" />
   <style>
     :root {
       --hud-bg: rgba(10, 14, 28, 0.55);
@@ -42,6 +43,25 @@
       text-align: right; font-size: 14px; line-height: 1.6;
     }
     #discoveries b { color: var(--accent); font-size: 17px; }
+
+    #liquid-tint {
+      position: fixed; inset: 0; pointer-events: none;
+      opacity: 0; transition: opacity 0.3s ease;
+    }
+
+    #fuel-wrap {
+      position: absolute; bottom: 42px; left: 50%; transform: translateX(-50%);
+      width: 220px; height: 12px; padding: 2px;
+      border-radius: 999px; overflow: hidden;
+      transition: opacity 0.6s ease;
+    }
+    #fuel-wrap.full { opacity: 0.25; }
+    #fuel-bar {
+      height: 100%; width: 100%; border-radius: 999px;
+      background: linear-gradient(90deg, #4fa0e8, #8fd0ff);
+      transition: width 0.1s linear;
+    }
+    #fuel-bar.low { background: linear-gradient(90deg, #e84f4f, #ff8f5a); }
 
     #controls-hint {
       position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
@@ -104,7 +124,7 @@
     #start-overlay .click-hint { font-size: 16px; color: #ffe28f; letter-spacing: 0.2em; animation: pulse 1.6s ease infinite; }
     @keyframes pulse { 50% { opacity: 0.45; } }
   </style>
-  <script type="module" crossorigin src="/assets/index-DOTbNcf8.js"></script>
+  <script type="module" crossorigin src="/assets/index-CKf53Xx8.js"></script>
 </head>
 <body>
   <div id="hud">
@@ -126,11 +146,13 @@
       <h2>Discovery Log</h2>
       <div id="log-entries"><div class="log-empty">Nothing discovered yet. Glowing artifacts await on every planet…</div></div>
     </div>
+    <div id="fuel-wrap" class="panel full"><div id="fuel-bar"></div></div>
     <div id="controls-hint">
-      <span>WASD</span> move · <span>Space</span> jump / hold to jetpack · <span>Shift</span> boost ·
-      <span>Tab</span> log · <span>N</span> new system · <span>R</span> rescue
+      <span>WASD</span> move · <span>Space</span> jump / jetpack · <span>Shift</span> boost ·
+      <span>C</span> dive · <span>Tab</span> log · <span>N</span> new system · <span>R</span> rescue
     </div>
   </div>
+  <div id="liquid-tint"></div>
   <div id="start-overlay">
     <h1>PLANET EXPLORER</h1>
     <p>

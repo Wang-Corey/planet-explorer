@@ -1,8 +1,17 @@
 import * as THREE from 'three';
 import { createNoise3D } from 'simplex-noise';
+import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from 'three-mesh-bvh';
 import { createRng } from '../core/rng.js';
 import { generateDiscoveryName, generatePlanetName } from './types.js';
 import { buildPropGeometry, propGlows } from './props.js';
+import { Creature } from './creatures.js';
+
+THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
+THREE.BufferGeometry.prototype.disposeBoundsTree = disposeBoundsTree;
+THREE.Mesh.prototype.raycast = acceleratedRaycast;
+
+const _groundRay = new THREE.Ray();
+const CREATURE_UPDATE_RANGE = 400;
 
 const TERRAIN_DETAIL = 5;
 const LIQUID_DETAIL = 4;
@@ -113,12 +122,16 @@ export class Planet {
 
     this.collectibles = [];
     this.collectedCount = 0;
+    this.creatures = [];
+    this.speciesName = null;
+    this.speciesScanned = false;
 
     this.buildTerrain();
     this.buildLiquid();
     this.buildAtmosphere();
     this.buildProps();
     this.buildCollectibles();
+    this.buildCreatures();
     this.buildParticles();
     this.applyOrbitTransform();
   }
@@ -140,20 +153,41 @@ export class Planet {
   }
 
   // Normalized elevation in [0, 1] for a unit direction in planet-local space.
+  // Liquids with a `basin` factor get their underwater terrain pushed deeper,
+  // so swimmable worlds have real depth instead of ankle-high ponds.
   elevationAt(localDirection) {
     const raw = this.rawNoise(localDirection);
-    const shaped = shapeElevation(this.type.shape, raw, this.noise3D, localDirection, this.type.noiseFrequency);
-    return THREE.MathUtils.clamp(shaped, 0, 1);
+    let elevation = shapeElevation(this.type.shape, raw, this.noise3D, localDirection, this.type.noiseFrequency);
+    const liquid = this.type.liquid;
+    if (liquid && liquid.basin && elevation < liquid.level) {
+      elevation = liquid.level - (liquid.level - elevation) * liquid.basin;
+    }
+    return THREE.MathUtils.clamp(elevation, 0, 1);
   }
 
   surfaceRadiusFor(elevation) {
     return this.radius * (1 + this.type.amplitude * (elevation * 2 - 1));
   }
 
+  // Exact terrain radius along a planet-local direction, raycast against the
+  // rendered mesh so collision matches the flat low-poly faces. Frozen seas
+  // ('solid' liquids) are walkable, so they clamp the ground upward.
+  groundRadiusLocal(localDirection) {
+    const startRadius = this.radius * (1 + this.type.amplitude) + 6;
+    _groundRay.origin.copy(localDirection).multiplyScalar(startRadius);
+    _groundRay.direction.copy(localDirection).negate();
+    const hit = this.terrain.geometry.boundsTree.raycastFirst(_groundRay);
+    let ground = hit ? hit.point.length() : this.surfaceRadiusFor(this.elevationAt(localDirection));
+    if (this.type.liquidClass === 'solid' && this.type.liquid) {
+      ground = Math.max(ground, this.liquidRadius());
+    }
+    return ground;
+  }
+
   // Terrain height (distance from center) along a world-space direction.
   heightAtWorldDirection(worldDirection) {
     const local = worldDirection.clone().applyQuaternion(this.group.quaternion.clone().invert()).normalize();
-    return this.surfaceRadiusFor(this.elevationAt(local));
+    return this.groundRadiusLocal(local);
   }
 
   liquidRadius() {
@@ -194,6 +228,7 @@ export class Planet {
     }
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geometry.computeVertexNormals();
+    geometry.computeBoundsTree();
 
     this.terrain = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
       vertexColors: true,
@@ -282,7 +317,7 @@ export class Planet {
       for (let i = 0; i < config.count; i++) {
         const spot = this.randomSurfacePoint(config.minE, config.maxE);
         if (!spot) continue;
-        position.copy(spot.direction).multiplyScalar(this.surfaceRadiusFor(spot.elevation) - 0.08);
+        position.copy(spot.direction).multiplyScalar(this.groundRadiusLocal(spot.direction) - 0.08);
         quaternion.setFromUnitVectors(up, spot.direction);
         tiltQuaternion.setFromEuler(new THREE.Euler(this.rng.range(-0.06, 0.06), this.rng.range(0, Math.PI * 2), this.rng.range(-0.06, 0.06)));
         quaternion.multiply(tiltQuaternion);
@@ -322,7 +357,7 @@ export class Planet {
       halo.scale.setScalar(3.2);
       mesh.add(halo);
 
-      const baseRadius = this.surfaceRadiusFor(spot.elevation) + 1.1;
+      const baseRadius = this.groundRadiusLocal(spot.direction) + 1.1;
       mesh.position.copy(spot.direction).multiplyScalar(baseRadius);
       this.group.add(mesh);
 
@@ -334,6 +369,16 @@ export class Planet {
         name: generateDiscoveryName(this.rng, discovery),
         collected: false,
       });
+    }
+  }
+
+  buildCreatures() {
+    const config = this.type.creature;
+    if (!config) return;
+    this.speciesName = `${this.rng.pick(config.prefixes)} ${this.rng.pick(config.suffixes)}`;
+    const count = this.rng.int(config.count[0], config.count[1]);
+    for (let i = 0; i < count; i++) {
+      this.creatures.push(new Creature(this, this.rng));
     }
   }
 
@@ -377,7 +422,7 @@ export class Planet {
     this.group.quaternion.setFromAxisAngle(this.spinAxis, this.spinAngle);
   }
 
-  update(dt, elapsed) {
+  update(dt, elapsed, playerWorldPosition) {
     this.prevCenter.copy(this.group.position);
     this.prevQuaternion.copy(this.group.quaternion);
 
@@ -392,6 +437,16 @@ export class Planet {
       const bob = Math.sin(elapsed * 1.8 + item.phase) * 0.35;
       item.mesh.position.copy(item.direction).multiplyScalar(item.baseRadius + bob);
       item.mesh.rotation.y = elapsed * 1.2 + item.phase;
+    }
+
+    // Creatures only think when the player is near enough to ever see them
+    if (playerWorldPosition && playerWorldPosition.distanceTo(this.group.position) < CREATURE_UPDATE_RANGE) {
+      const playerLocal = playerWorldPosition.clone()
+        .sub(this.group.position)
+        .applyQuaternion(this.group.quaternion.clone().invert());
+      for (const creature of this.creatures) {
+        creature.update(dt, elapsed, this, playerLocal);
+      }
     }
   }
 
@@ -409,6 +464,27 @@ export class Planet {
       }
     }
     return null;
+  }
+
+  tryScan(playerWorldPosition, reach = 5) {
+    if (this.speciesScanned || this.creatures.length === 0) return null;
+    const worldPosition = new THREE.Vector3();
+    for (const creature of this.creatures) {
+      creature.root.getWorldPosition(worldPosition);
+      if (worldPosition.distanceToSquared(playerWorldPosition) < reach * reach) {
+        this.speciesScanned = true;
+        return this.speciesName;
+      }
+    }
+    return null;
+  }
+
+  totalDiscoveryCount() {
+    return this.collectibles.length + (this.creatures.length > 0 ? 1 : 0);
+  }
+
+  discoveredCount() {
+    return this.collectedCount + (this.speciesScanned ? 1 : 0);
   }
 
   dispose() {

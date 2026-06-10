@@ -53,6 +53,61 @@ const counter = await page.textContent('#disc-total');
 console.log(`collect test: ${collectResult}, discoveries counter now "${counter.trim()}"`);
 await page.screenshot({ path: '/tmp/pe-collect.png' });
 
+// Drop into a swimmable ocean and confirm swim mode engages
+const swimResult = await page.evaluate(() => {
+  const { player, system } = window.__game;
+  const swimPlanets = system.planets.filter((p) => p.type.liquidClass === 'swim');
+  if (swimPlanets.length === 0) return 'no swim planet in this system';
+  for (const planet of swimPlanets) {
+    for (let attempt = 0; attempt < 300; attempt++) {
+      const direction = new player.position.constructor(
+        Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1
+      ).normalize();
+      const terrain = planet.heightAtWorldDirection(direction);
+      if (terrain + 2.5 < planet.liquidRadius()) {
+        player.position.copy(planet.center).addScaledVector(direction, planet.liquidRadius() - 0.5);
+        player.velocity.set(0, 0, 0);
+        player.grounded = false;
+        return `dropped into ${planet.type.id} liquid`;
+      }
+    }
+  }
+  return 'no deep liquid spot found on any swim planet';
+});
+await page.waitForTimeout(1200);
+const swimState = await page.evaluate(() => ({
+  swimming: window.__game.player.swimming,
+  planetType: window.__game.player.planet.type.id,
+}));
+console.log(`swim test: ${swimResult} ->`, JSON.stringify(swimState));
+await page.screenshot({ path: '/tmp/pe-swim.png' });
+
+// Walk up to a creature and confirm the species scan registers
+const scanResult = await page.evaluate(() => {
+  const { player, system } = window.__game;
+  const planet = system.planets.find((p) => p.creatures.length > 0 && !p.speciesScanned);
+  if (!planet) return 'no unscanned creatures';
+  const creature = planet.creatures[0];
+  const worldPosition = creature.root.position.clone()
+    .applyQuaternion(planet.group.quaternion)
+    .add(planet.group.position);
+  player.position.copy(worldPosition).addScaledVector(worldPosition.clone().sub(planet.center).normalize(), 1.5);
+  player.velocity.set(0, 0, 0);
+  return `teleported to a ${planet.type.id} creature`;
+});
+await page.waitForTimeout(800);
+const scanned = await page.evaluate(() => window.__game.player.planet.speciesScanned);
+console.log(`scan test: ${scanResult} -> speciesScanned=${scanned}`);
+await page.screenshot({ path: '/tmp/pe-creature.png' });
+
+// Jetpack fuel should drain while thrusting
+const fuelBefore = await page.evaluate(() => window.__game.player.fuel);
+await page.keyboard.down(' ');
+await page.waitForTimeout(2000);
+await page.keyboard.up(' ');
+const fuelAfter = await page.evaluate(() => window.__game.player.fuel);
+console.log(`fuel test: ${fuelBefore.toFixed(0)} -> ${fuelAfter.toFixed(0)} (should drop)`);
+
 // Discovery log + new system
 await page.keyboard.press('Tab');
 await page.waitForTimeout(400);

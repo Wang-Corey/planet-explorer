@@ -9,6 +9,9 @@ export class Hud {
     this.logPanel = document.getElementById('log-panel');
     this.logEntries = document.getElementById('log-entries');
     this.hint = document.getElementById('controls-hint');
+    this.fuelWrap = document.getElementById('fuel-wrap');
+    this.fuelBar = document.getElementById('fuel-bar');
+    this.liquidTint = document.getElementById('liquid-tint');
     this.bannerTimer = null;
     this.discoveries = new Map();
 
@@ -30,7 +33,22 @@ export class Hud {
 
   updateCounts(totalCollected, totalAvailable, planet) {
     this.discTotal.textContent = `${totalCollected} / ${totalAvailable}`;
-    this.discPlanet.textContent = `This planet: ${planet.collectedCount} / ${planet.collectibles.length}`;
+    this.discPlanet.textContent = `This planet: ${planet.discoveredCount()} / ${planet.totalDiscoveryCount()}`;
+  }
+
+  setFuel(fraction) {
+    this.fuelBar.style.width = `${Math.round(fraction * 100)}%`;
+    this.fuelBar.classList.toggle('low', fraction < 0.25);
+    this.fuelWrap.classList.toggle('full', fraction > 0.999);
+  }
+
+  setLiquidTint(color) {
+    if (color) {
+      this.liquidTint.style.background = color;
+      this.liquidTint.style.opacity = 0.35;
+    } else {
+      this.liquidTint.style.opacity = 0;
+    }
   }
 
   addDiscovery(planet, itemName) {

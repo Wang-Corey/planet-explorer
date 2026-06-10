@@ -1,18 +1,34 @@
 import * as THREE from 'three';
-import { setJetpack } from '../core/audio.js';
+import { setJetpack, playSplash, playBounce } from '../core/audio.js';
 
 const WALK_SPEED = 9;
 const RUN_SPEED = 15;
 const JUMP_SPEED = 13;
-const SURFACE_GRAVITY = 28;
-const JET_UP_ACCEL = 50;
+const SURFACE_GRAVITY = 32;
+const GRAVITY_FALLOFF_EXPONENT = 1.35;
+const DEEP_SPACE_GRAVITY = 3;
+const JET_UP_ACCEL = 46;
 const JET_THRUST_ACCEL = 30;
-const BOOST_MULTIPLIER = 2.6;
+const BOOST_MULTIPLIER = 2.4;
 const AIR_SPEED_CAP = 40;
-const BOOST_SPEED_CAP = 115;
+const BOOST_SPEED_CAP = 100;
 const AIR_DRAG = 0.06;
 const GROUND_OFFSET = 1.0;
 const CARRY_RANGE_FACTOR = 1.6;
+
+const MAX_FUEL = 100;
+const FUEL_BURN = 12;
+const BOOST_BURN_MULTIPLIER = 2.2;
+const STEER_BURN = 6;
+const FUEL_RECHARGE = 35;
+
+const SWIM_SPEED = 6.5;
+const SWIM_ACCEL = 24;
+const SWIM_VERTICAL_ACCEL = 16;
+const WATER_DRAG = 1.6;
+const BUOYANCY_ACCEL = 9;
+const FLOAT_LINE = 0.35;
+const HAZARD_BOUNCE_SPEED = 20;
 
 export class Player {
   constructor(scene) {
@@ -25,6 +41,8 @@ export class Player {
     this.planet = null;
     this.walkCycle = 0;
     this.jetting = false;
+    this.swimming = false;
+    this.fuel = MAX_FUEL;
 
     this.keys = {};
     this.jumpQueued = false;
@@ -36,6 +54,10 @@ export class Player {
 
     this.buildCharacter();
     this.buildShadow();
+  }
+
+  get fuelFraction() {
+    return this.fuel / MAX_FUEL;
   }
 
   buildCharacter() {
@@ -141,7 +163,7 @@ export class Player {
     if (planet) this.applyPlanetCarry(planet);
 
     const toCenter = new THREE.Vector3().subVectors(planet.center, this.position);
-    const distance = toCenter.length();
+    let distance = toCenter.length();
     this.up.copy(toCenter).multiplyScalar(-1 / distance);
 
     const boosting = !!(this.keys.ShiftLeft || this.keys.ShiftRight);
@@ -157,9 +179,66 @@ export class Player {
     if (this.keys.KeyD || this.keys.ArrowRight) moveX += 1;
     if (this.keys.KeyA || this.keys.ArrowLeft) moveX -= 1;
 
+    // Liquid context at the player's current direction from the planet center
+    const liquid = planet.type.liquid;
+    const liquidClass = planet.type.liquidClass;
+    const liquidRadius = liquid ? planet.liquidRadius() : 0;
+    const terrainRadius = liquid ? planet.heightAtWorldDirection(this.up) : 0;
+    const overDeepLiquid = !!liquid && terrainRadius + 1.2 < liquidRadius;
+
+    // Hazard liquids (lava, acid, void) bounce you out instead of letting you in
+    if (liquidClass === 'hazard' && overDeepLiquid && distance < liquidRadius + 0.4) {
+      this.position.copy(planet.center).addScaledVector(this.up, liquidRadius + 0.6);
+      distance = liquidRadius + 0.6;
+      const radial = this.velocity.dot(this.up);
+      this.velocity.addScaledVector(this.up, -radial + HAZARD_BOUNCE_SPEED);
+      this.grounded = false;
+      playBounce();
+    }
+
+    const wasSwimming = this.swimming;
+    this.swimming = liquidClass === 'swim' && overDeepLiquid && distance < liquidRadius + FLOAT_LINE;
+    if (this.swimming && !wasSwimming) playSplash();
+
     this.jetting = false;
 
-    if (this.grounded) {
+    if (this.swimming) {
+      this.grounded = false;
+      this.fuel = Math.min(MAX_FUEL, this.fuel + FUEL_RECHARGE * 0.6 * dt);
+
+      const moveDirection = new THREE.Vector3()
+        .addScaledVector(forwardTangent, moveZ)
+        .addScaledVector(right, moveX);
+      const moving = moveDirection.lengthSq() > 0;
+      if (moving) {
+        moveDirection.normalize();
+        this.velocity.addScaledVector(moveDirection, SWIM_ACCEL * dt);
+        this.facing.copy(moveDirection);
+      }
+
+      const atSurface = distance > liquidRadius - 0.2;
+      if (this.keys.Space) {
+        if (atSurface && this.jumpQueued) {
+          this.velocity.addScaledVector(this.up, JUMP_SPEED * 0.85);
+          this.swimming = false;
+        } else {
+          this.velocity.addScaledVector(this.up, SWIM_VERTICAL_ACCEL * dt);
+        }
+      }
+      if (this.keys.KeyC) this.velocity.addScaledVector(this.up, -SWIM_VERTICAL_ACCEL * dt);
+
+      // Buoyancy eases you back up to the float line unless you are diving
+      const depth = liquidRadius + FLOAT_LINE - distance;
+      if (depth > 0.5 && !this.keys.KeyC) {
+        this.velocity.addScaledVector(this.up, Math.min(depth, 1.5) * BUOYANCY_ACCEL * dt);
+      }
+
+      this.velocity.multiplyScalar(Math.exp(-WATER_DRAG * dt));
+      if (this.velocity.length() > SWIM_SPEED * 2) this.velocity.setLength(SWIM_SPEED * 2);
+      this.walkCycle += dt * (moving ? 7 : 2);
+    } else if (this.grounded) {
+      this.fuel = Math.min(MAX_FUEL, this.fuel + FUEL_RECHARGE * dt);
+
       const moveDirection = new THREE.Vector3()
         .addScaledVector(forwardTangent, moveZ)
         .addScaledVector(right, moveX);
@@ -176,16 +255,20 @@ export class Player {
         this.grounded = false;
       }
     } else {
-      const gravity = SURFACE_GRAVITY * Math.min(1.4, (planet.radius / distance) ** 2);
+      const gravity = Math.max(
+        SURFACE_GRAVITY * Math.min(1.5, (planet.radius / distance) ** GRAVITY_FALLOFF_EXPONENT),
+        DEEP_SPACE_GRAVITY
+      );
       this.velocity.addScaledVector(this.up, -gravity * dt);
 
       const thrustMultiplier = boosting ? BOOST_MULTIPLIER : 1;
-      if (this.keys.Space) {
+      let burnRate = 0;
+      if (this.keys.Space && this.fuel > 0) {
         this.jetting = true;
         this.velocity.addScaledVector(this.up, JET_UP_ACCEL * thrustMultiplier * dt);
+        burnRate += FUEL_BURN * (boosting ? BOOST_BURN_MULTIPLIER : 1);
       }
-      if (moveX !== 0 || moveZ !== 0) {
-        this.jetting = this.jetting || this.keys.Space;
+      if ((moveX !== 0 || moveZ !== 0) && this.fuel > 0) {
         const airForward = camera.getWorldDirection(new THREE.Vector3());
         const thrust = new THREE.Vector3()
           .addScaledVector(airForward, moveZ)
@@ -193,9 +276,11 @@ export class Player {
           .normalize()
           .multiplyScalar(JET_THRUST_ACCEL * thrustMultiplier * dt);
         this.velocity.add(thrust);
+        burnRate += STEER_BURN;
         this.facing.copy(airForward).addScaledVector(this.up, -airForward.dot(this.up));
         if (this.facing.lengthSq() > 1e-6) this.facing.normalize();
       }
+      this.fuel = Math.max(0, this.fuel - burnRate * dt);
 
       this.velocity.multiplyScalar(Math.exp(-AIR_DRAG * dt));
       const speedCap = boosting ? BOOST_SPEED_CAP : AIR_SPEED_CAP;
@@ -205,7 +290,7 @@ export class Player {
 
     this.position.addScaledVector(this.velocity, dt);
 
-    // Ground collision against the analytic terrain height
+    // Collision against the real terrain mesh (raycast through the BVH)
     const fromCenter = new THREE.Vector3().subVectors(this.position, planet.center);
     const newDistance = fromCenter.length();
     const direction = fromCenter.divideScalar(newDistance);
@@ -223,7 +308,7 @@ export class Player {
       this.position.copy(planet.center).addScaledVector(direction, groundHeight);
       const radial = this.velocity.dot(direction);
       if (radial < 0) this.velocity.addScaledVector(direction, -radial);
-      this.grounded = true;
+      this.grounded = !this.swimming;
     }
 
     setJetpack(this.jetting, boosting);
