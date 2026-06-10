@@ -125,6 +125,7 @@ export class Planet {
     this.creatures = [];
     this.speciesName = null;
     this.speciesScanned = false;
+    this.baits = [];
 
     this.buildTerrain();
     this.buildLiquid();
@@ -132,6 +133,7 @@ export class Planet {
     this.buildProps();
     this.buildCollectibles();
     this.buildCreatures();
+    this.buildBait();
     this.buildParticles();
     this.applyOrbitTransform();
   }
@@ -378,7 +380,28 @@ export class Planet {
     this.speciesName = `${this.rng.pick(config.prefixes)} ${this.rng.pick(config.suffixes)}`;
     const count = this.rng.int(config.count[0], config.count[1]);
     for (let i = 0; i < count; i++) {
-      this.creatures.push(new Creature(this, this.rng));
+      this.creatures.push(new Creature(this, this.rng.int(0, 0xfffffff)));
+    }
+  }
+
+  buildBait() {
+    const color = this.type.discovery.color;
+    const material = new THREE.MeshStandardMaterial({
+      color,
+      emissive: color,
+      emissiveIntensity: 0.9,
+      roughness: 0.4,
+    });
+    const minElevation = this.type.liquid && this.type.liquidClass !== 'solid' ? this.type.liquid.level + 0.02 : 0;
+    for (let i = 0; i < 10; i++) {
+      const spot = this.randomSurfacePoint(minElevation, 1);
+      if (!spot) continue;
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 6), material);
+      mesh.scale.y = 0.75;
+      const baseRadius = this.groundRadiusLocal(spot.direction) + 0.5;
+      mesh.position.copy(spot.direction).multiplyScalar(baseRadius);
+      this.group.add(mesh);
+      this.baits.push({ mesh, direction: spot.direction, baseRadius, phase: this.rng.range(0, Math.PI * 2), collected: false });
     }
   }
 
@@ -422,7 +445,7 @@ export class Planet {
     this.group.quaternion.setFromAxisAngle(this.spinAxis, this.spinAngle);
   }
 
-  update(dt, elapsed, playerWorldPosition) {
+  update(dt, elapsed, playerWorldPosition, creatureFlags) {
     this.prevCenter.copy(this.group.position);
     this.prevQuaternion.copy(this.group.quaternion);
 
@@ -439,13 +462,18 @@ export class Planet {
       item.mesh.rotation.y = elapsed * 1.2 + item.phase;
     }
 
+    for (const bait of this.baits) {
+      if (bait.collected) continue;
+      bait.mesh.position.copy(bait.direction).multiplyScalar(bait.baseRadius + Math.sin(elapsed * 2.2 + bait.phase) * 0.15);
+    }
+
     // Creatures only think when the player is near enough to ever see them
     if (playerWorldPosition && playerWorldPosition.distanceTo(this.group.position) < CREATURE_UPDATE_RANGE) {
       const playerLocal = playerWorldPosition.clone()
         .sub(this.group.position)
         .applyQuaternion(this.group.quaternion.clone().invert());
       for (const creature of this.creatures) {
-        creature.update(dt, elapsed, this, playerLocal);
+        creature.update(dt, elapsed, this, playerLocal, creatureFlags);
       }
     }
   }
@@ -477,6 +505,61 @@ export class Planet {
       }
     }
     return null;
+  }
+
+  tryPickupBait(playerWorldPosition, reach = 2.2) {
+    const worldPosition = new THREE.Vector3();
+    for (const bait of this.baits) {
+      if (bait.collected) continue;
+      bait.mesh.getWorldPosition(worldPosition);
+      if (worldPosition.distanceToSquared(playerWorldPosition) < reach * reach) {
+        bait.collected = true;
+        this.group.remove(bait.mesh);
+        bait.mesh.geometry.dispose();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  tryTame(playerWorldPosition, reach = 2.8) {
+    const worldPosition = new THREE.Vector3();
+    for (let i = 0; i < this.creatures.length; i++) {
+      const creature = this.creatures[i];
+      creature.root.getWorldPosition(worldPosition);
+      if (worldPosition.distanceToSquared(playerWorldPosition) < reach * reach) {
+        this.creatures.splice(i, 1);
+        this.group.remove(creature.root);
+        creature.root.traverse((object) => {
+          if (object.geometry) object.geometry.dispose();
+          if (object.material) object.material.dispose();
+        });
+        return { seed: creature.seed, typeId: this.type.id, species: this.speciesName, origin: this.name };
+      }
+    }
+    return null;
+  }
+
+  // Fairy-pet perk: make the nearest undiscovered artifact visibly pulse
+  pulseNearestArtifact(playerWorldPosition, elapsed) {
+    const worldPosition = new THREE.Vector3();
+    let nearest = null;
+    let nearestDistance = Infinity;
+    for (const item of this.collectibles) {
+      if (item.collected) continue;
+      item.mesh.getWorldPosition(worldPosition);
+      const distance = worldPosition.distanceToSquared(playerWorldPosition);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = item;
+      }
+    }
+    for (const item of this.collectibles) {
+      if (item.collected) continue;
+      const halo = item.mesh.children[0];
+      if (!halo) continue;
+      halo.scale.setScalar(item === nearest ? 4 + (Math.sin(elapsed * 5) + 1) * 3 : 3.2);
+    }
   }
 
   totalDiscoveryCount() {

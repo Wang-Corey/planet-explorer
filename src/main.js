@@ -5,7 +5,8 @@ import { Player } from './player/Player.js';
 import { CameraRig } from './player/CameraRig.js';
 import { Hud } from './ui/hud.js';
 import { randomSeed } from './core/rng.js';
-import { initAudio, playChime, playWarp, playScan } from './core/audio.js';
+import { initAudio, playChime, playWarp, playScan, playTreat, playTame } from './core/audio.js';
+import { PetManager } from './pets/pets.js';
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -29,6 +30,16 @@ let totalCollected = 0;
 let bannerPlanet = null;
 
 player.spawnOn(system.planets[0]);
+
+const petManager = new PetManager(scene);
+petManager.summon(player);
+
+function syncPetHud() {
+  hud.setActivePet(petManager.activePet, petManager.perksForActive().label);
+  hud.setPetCollection(petManager.pets, petManager.activeIndex);
+  hud.setTreats(player.treats);
+}
+syncPetHud();
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -71,6 +82,9 @@ window.addEventListener('keydown', (event) => {
     hud.toggleLog();
   } else if (event.code === 'KeyN') {
     regenerateSystem();
+  } else if (event.code === 'KeyP') {
+    petManager.cycle(player);
+    syncPetHud();
   } else if (event.code === 'KeyR') {
     const nearest = system.nearestPlanetTo(player.position);
     if (nearest) {
@@ -109,12 +123,29 @@ function updatePlanetPresence() {
       playChime();
       hud.addDiscovery(planet, collectedName);
     }
-    const scannedSpecies = planet.tryScan(player.position);
+    const scannedSpecies = planet.tryScan(player.position, 5 * (player.perks.reachMult || 1));
     if (scannedSpecies) {
       totalCollected++;
       playScan();
       hud.addDiscovery(planet, `${scannedSpecies} (creature)`);
     }
+    if (planet.tryPickupBait(player.position, 2.2 * (player.perks.reachMult || 1))) {
+      player.treats++;
+      playTreat();
+      hud.setTreats(player.treats);
+    }
+    if (player.luring) {
+      const tamed = planet.tryTame(player.position);
+      if (tamed) {
+        const treatSaved = player.perks.treatSaver && Math.random() < 0.5;
+        if (!treatSaved) player.treats--;
+        petManager.tame(tamed, player);
+        playTame();
+        hud.showToast('Tamed', tamed.species);
+        syncPetHud();
+      }
+    }
+    if (player.perks.beacon) planet.pulseNearestArtifact(player.position, elapsed);
     hud.updateCounts(totalCollected, system.totalDiscoveries(), planet);
   }
 }
@@ -128,7 +159,7 @@ function updateLiquidTint() {
   hud.setLiquidTint(submerged ? planet.type.liquid.color : null);
 }
 
-window.__game = { player, get system() { return system; } };
+window.__game = { player, petManager, get system() { return system; } };
 
 const clock = new THREE.Clock();
 let elapsed = 0;
@@ -137,8 +168,9 @@ function tick() {
   const dt = Math.min(clock.getDelta(), 0.05);
   elapsed += dt;
 
-  system.update(dt, elapsed, player.position);
+  system.update(dt, elapsed, player.position, { luring: player.luring, noFlee: !!player.perks.noFlee });
   player.update(dt, cameraRig.forward, camera, system);
+  petManager.update(dt, elapsed, player);
   cameraRig.update(dt, player, system);
   checkSunRescue();
   updatePlanetPresence();

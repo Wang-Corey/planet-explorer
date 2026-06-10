@@ -100,6 +100,43 @@ const scanned = await page.evaluate(() => window.__game.player.planet.speciesSca
 console.log(`scan test: ${scanResult} -> speciesScanned=${scanned}`);
 await page.screenshot({ path: '/tmp/pe-creature.png' });
 
+// Grab a treat, then lure-feed a creature and confirm it joins the pet collection
+const tameResult = await page.evaluate(() => {
+  const { player, system, petManager } = window.__game;
+  const planet = system.planets.find((p) => p.creatures.length > 0);
+  if (!planet) return 'no creatures left';
+  const bait = planet.baits.find((b) => !b.collected);
+  if (bait) {
+    const baitWorld = bait.mesh.position.clone().applyQuaternion(planet.group.quaternion).add(planet.group.position);
+    player.position.copy(baitWorld);
+    player.velocity.set(0, 0, 0);
+  }
+  return `bait at ${planet.type.id}, pets before: ${petManager.pets.length}`;
+});
+await page.waitForTimeout(500);
+const treats = await page.evaluate(() => window.__game.player.treats);
+console.log(`bait test: ${tameResult} -> treats=${treats} (should be >0)`);
+
+await page.keyboard.down('f');
+await page.evaluate(() => {
+  const { player, system } = window.__game;
+  const planet = system.planets.find((p) => p.creatures.length > 0);
+  const creature = planet.creatures[0];
+  const creatureWorld = creature.root.position.clone().applyQuaternion(planet.group.quaternion).add(planet.group.position);
+  player.position.copy(creatureWorld);
+  player.velocity.set(0, 0, 0);
+});
+await page.waitForTimeout(600);
+await page.keyboard.up('f');
+const petState = await page.evaluate(() => ({
+  pets: window.__game.petManager.pets.length,
+  active: window.__game.petManager.activePet?.species ?? null,
+  perks: Object.keys(window.__game.player.perks),
+  saved: JSON.parse(localStorage.getItem('planet-explorer-pets-v1') || '{}').pets?.length ?? 0,
+}));
+console.log('tame test:', JSON.stringify(petState));
+await page.screenshot({ path: '/tmp/pe-pet.png' });
+
 // Jetpack fuel should drain while thrusting
 const fuelBefore = await page.evaluate(() => window.__game.player.fuel);
 await page.keyboard.down(' ');

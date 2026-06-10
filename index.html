@@ -44,6 +44,18 @@
     }
     #discoveries b { color: var(--accent); font-size: 17px; }
 
+    #pet-info {
+      position: absolute; bottom: 16px; left: 18px;
+      font-size: 12.5px; line-height: 1.7; max-width: 250px;
+    }
+    #pet-name { font-size: 14.5px; font-weight: 600; color: #ffd6a0; }
+    #pet-perk { opacity: 0.85; }
+    #treat-count { color: var(--accent); }
+    #treat-count span { color: #ffe28f; font-weight: 600; }
+
+    #log-panel .log-pets { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--hud-border); }
+    #log-panel .log-pets li.active-pet::before { content: "★"; color: #ffd6a0; }
+
     #liquid-tint {
       position: fixed; inset: 0; pointer-events: none;
       opacity: 0; transition: opacity 0.3s ease;
@@ -145,10 +157,15 @@
       <h2>Discovery Log</h2>
       <div id="log-entries"><div class="log-empty">Nothing discovered yet. Glowing artifacts await on every planet…</div></div>
     </div>
+    <div id="pet-info" class="panel">
+      <div id="pet-name">No pet</div>
+      <div id="pet-perk">Feed a creature a treat to tame it</div>
+      <div id="treat-count">Treats: 0 · hold <span>F</span> near a creature</div>
+    </div>
     <div id="fuel-wrap" class="panel full"><div id="fuel-bar"></div></div>
     <div id="controls-hint">
-      <span>WASD</span> move · <span>Space</span> jump / jetpack · <span>Shift</span> boost ·
-      <span>C</span> dive · <span>Tab</span> log · <span>N</span> new system · <span>R</span> rescue
+      <span>WASD</span> move · <span>Space</span> jump / jetpack · <span>Shift</span> boost · <span>C</span> dive ·
+      <span>F</span> feed · <span>P</span> pet · <span>Tab</span> log · <span>N</span> new system · <span>R</span> rescue
     </div>
   </div>
   <div id="liquid-tint"></div>

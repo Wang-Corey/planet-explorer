@@ -12,8 +12,13 @@ export class Hud {
     this.fuelWrap = document.getElementById('fuel-wrap');
     this.fuelBar = document.getElementById('fuel-bar');
     this.liquidTint = document.getElementById('liquid-tint');
+    this.petName = document.getElementById('pet-name');
+    this.petPerk = document.getElementById('pet-perk');
+    this.treatCount = document.getElementById('treat-count');
     this.bannerTimer = null;
     this.discoveries = new Map();
+    this.pets = [];
+    this.activePetIndex = -1;
 
     setTimeout(() => this.hint.classList.add('faded'), 14000);
   }
@@ -42,6 +47,26 @@ export class Hud {
     this.fuelWrap.classList.toggle('full', fraction > 0.999);
   }
 
+  setTreats(count) {
+    this.treatCount.innerHTML = `Treats: ${count} · hold <span>F</span> near a creature`;
+  }
+
+  setActivePet(pet, perkLabel) {
+    if (pet) {
+      this.petName.textContent = pet.species;
+      this.petPerk.textContent = perkLabel || 'Loyal companion';
+    } else {
+      this.petName.textContent = 'No pet';
+      this.petPerk.textContent = 'Feed a creature a treat to tame it';
+    }
+  }
+
+  setPetCollection(pets, activeIndex) {
+    this.pets = pets;
+    this.activePetIndex = activeIndex;
+    this.renderLog();
+  }
+
   setLiquidTint(color) {
     if (color) {
       this.liquidTint.style.background = color;
@@ -58,21 +83,48 @@ export class Hud {
     }
     this.discoveries.get(key).items.push(itemName);
     this.renderLog();
+    this.showToast('Discovered', itemName);
+  }
 
+  showToast(prefix, highlight) {
     const toast = document.createElement('div');
     toast.className = 'toast';
-    toast.innerHTML = `Discovered <b></b>`;
-    toast.querySelector('b').textContent = itemName;
+    toast.innerHTML = `${prefix} <b></b>`;
+    toast.querySelector('b').textContent = highlight;
     this.toasts.appendChild(toast);
     setTimeout(() => toast.remove(), 3300);
   }
 
   renderLog() {
+    this.logEntries.innerHTML = '';
+
+    if (this.pets.length > 0) {
+      const section = document.createElement('div');
+      section.className = 'log-planet log-pets';
+      const heading = document.createElement('h3');
+      heading.textContent = `Pets (${this.pets.length})`;
+      const hint = document.createElement('small');
+      hint.textContent = 'P to cycle';
+      heading.appendChild(hint);
+      const list = document.createElement('ul');
+      this.pets.forEach((pet, index) => {
+        const row = document.createElement('li');
+        row.textContent = `${pet.species} — from ${pet.origin}`;
+        if (index === this.activePetIndex) row.className = 'active-pet';
+        list.appendChild(row);
+      });
+      section.appendChild(heading);
+      section.appendChild(list);
+      this.logEntries.appendChild(section);
+    }
+
     if (this.discoveries.size === 0) {
-      this.logEntries.innerHTML = '<div class="log-empty">Nothing discovered yet. Glowing artifacts await on every planet…</div>';
+      const empty = document.createElement('div');
+      empty.className = 'log-empty';
+      empty.textContent = 'Nothing discovered yet. Glowing artifacts await on every planet…';
+      this.logEntries.appendChild(empty);
       return;
     }
-    this.logEntries.innerHTML = '';
     for (const [planetName, entry] of this.discoveries) {
       const section = document.createElement('div');
       section.className = 'log-planet';

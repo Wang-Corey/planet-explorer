@@ -47,8 +47,8 @@ export class SolarSystem {
     }
   }
 
-  update(dt, elapsed, playerWorldPosition) {
-    for (const planet of this.planets) planet.update(dt, elapsed, playerWorldPosition);
+  update(dt, elapsed, playerWorldPosition, creatureFlags) {
+    for (const planet of this.planets) planet.update(dt, elapsed, playerWorldPosition, creatureFlags);
   }
 
   nearestPlanetTo(position) {

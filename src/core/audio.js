@@ -119,6 +119,39 @@ export function playScan() {
   });
 }
 
+export function playTreat() {
+  if (!context) return;
+  const now = context.currentTime;
+  const osc = context.createOscillator();
+  const gain = context.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(620, now);
+  osc.frequency.exponentialRampToValueAtTime(980, now + 0.08);
+  gain.gain.setValueAtTime(0.12, now);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+  osc.connect(gain).connect(context.destination);
+  osc.start(now);
+  osc.stop(now + 0.2);
+}
+
+export function playTame() {
+  if (!context) return;
+  const now = context.currentTime;
+  [392, 493.88, 587.33, 783.99].forEach((frequency, i) => {
+    const osc = context.createOscillator();
+    const gain = context.createGain();
+    osc.type = 'triangle';
+    osc.frequency.value = frequency;
+    const start = now + i * 0.09;
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.16, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.5);
+    osc.connect(gain).connect(context.destination);
+    osc.start(start);
+    osc.stop(start + 0.55);
+  });
+}
+
 export function setJetpack(active, boosting) {
   if (!context || !jetGain) return;
   const now = context.currentTime;

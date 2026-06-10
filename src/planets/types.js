@@ -38,7 +38,7 @@ export const PLANET_TYPES = [
     label: 'Ocean World',
     shape: 'smooth',
     noiseFrequency: 1.4,
-    amplitude: 0.12,
+    amplitude: 0.16,
     colorStops: [
       [0.0, '#2b6a8f'],
       [0.45, '#5a93a8'],
@@ -69,7 +69,7 @@ export const PLANET_TYPES = [
     label: 'Toxic World',
     shape: 'smooth',
     noiseFrequency: 1.8,
-    amplitude: 0.1,
+    amplitude: 0.12,
     colorStops: [
       [0.0, '#3a4a1d'],
       [0.46, '#55652a'],
@@ -98,7 +98,7 @@ export const PLANET_TYPES = [
     label: 'Fairy World',
     shape: 'gentle',
     noiseFrequency: 1.5,
-    amplitude: 0.07,
+    amplitude: 0.11,
     colorStops: [
       [0.0, '#7fb88f'],
       [0.5, '#9ad5a0'],
@@ -185,7 +185,7 @@ export const PLANET_TYPES = [
     label: 'Forest World',
     shape: 'smooth',
     noiseFrequency: 1.5,
-    amplitude: 0.1,
+    amplitude: 0.13,
     colorStops: [
       [0.0, '#3a6a5d'],
       [0.45, '#d9c98f'],
@@ -215,7 +215,7 @@ export const PLANET_TYPES = [
     label: 'Fungal World',
     shape: 'gentle',
     noiseFrequency: 1.3,
-    amplitude: 0.09,
+    amplitude: 0.12,
     colorStops: [
       [0.0, '#5a4f6b'],
       [0.42, '#7a6f8f'],
@@ -244,7 +244,7 @@ export const PLANET_TYPES = [
     label: 'Candy World',
     shape: 'gentle',
     noiseFrequency: 1.4,
-    amplitude: 0.08,
+    amplitude: 0.12,
     colorStops: [
       [0.0, '#ffb8d8'],
       [0.47, '#ffd6e8'],
@@ -302,7 +302,7 @@ export const PLANET_TYPES = [
     label: 'Corrupted World',
     shape: 'glitch',
     noiseFrequency: 2.0,
-    amplitude: 0.11,
+    amplitude: 0.12,
     colorStops: [
       [0.0, '#0a0a16'],
       [0.3, '#1a1a2e'],

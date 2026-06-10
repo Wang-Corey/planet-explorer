@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createRng } from '../core/rng.js';
 
 // Each archetype builder returns a Group whose userData describes how the
 // shared Creature brain should move and animate it:
@@ -230,14 +231,53 @@ const ARCHETYPES = {
   },
 };
 
+// Deterministic visual from a seed, so a tamed pet can be rebuilt
+// identically from its saved record.
+export function buildCreatureVisual(typeId, seed) {
+  const rng = createRng(seed);
+  const root = ARCHETYPES[typeId](rng);
+  root.scale.setScalar(rng.range(0.8, 1.35));
+  return { root, rng };
+}
+
+export function animateCreatureParts(meta, state, dt, elapsed, speed) {
+  state.phase += dt * speed * 2.2;
+  if (meta.legs) {
+    meta.legs.forEach((pivot, i) => {
+      pivot.rotation.x = Math.sin(state.phase + (i % 2) * Math.PI) * 0.55;
+    });
+  }
+  if (meta.wings) {
+    for (const { pivot, side } of meta.wings) {
+      pivot.rotation.z = side * (0.4 + Math.sin(elapsed * 10 + state.phase) * 0.5);
+    }
+  }
+  if (meta.pulse) {
+    meta.pulse.scale.y = meta.pulse.scale.y * 0.9 + (0.7 + Math.sin(elapsed * 3 + state.phase) * 0.08) * 0.1;
+  }
+  if (meta.spin) meta.spin.rotation.y += dt * 1.5;
+  if (meta.waddlePart) meta.waddlePart.rotation.z = Math.sin(state.phase) * 0.16;
+  if (meta.jitterParts) {
+    state.jitterTimer -= dt;
+    if (state.jitterTimer <= 0) {
+      state.jitterTimer = 0.25;
+      for (const part of meta.jitterParts) {
+        part.position.x += (Math.random() - 0.5) * 0.2;
+        part.position.y += (Math.random() - 0.5) * 0.2;
+        part.position.z += (Math.random() - 0.5) * 0.2;
+        part.position.clampLength(0, 0.5);
+      }
+    }
+  }
+}
+
 export class Creature {
-  constructor(planet, rng) {
-    const build = ARCHETYPES[planet.type.id];
-    this.root = build(rng);
-    this.meta = this.root.userData;
-    const sizeVariation = rng.range(0.8, 1.35);
-    this.root.scale.setScalar(sizeVariation);
-    this.bodyHeight = this.meta.bodyHeight * sizeVariation;
+  constructor(planet, seed) {
+    this.seed = seed;
+    const { root, rng } = buildCreatureVisual(planet.type.id, seed);
+    this.root = root;
+    this.meta = root.userData;
+    this.bodyHeight = this.meta.bodyHeight * root.scale.x;
     this.speed = this.meta.speed * rng.range(0.85, 1.2);
 
     const minElevation = planet.type.liquid && planet.type.liquidClass !== 'solid' && this.meta.mode !== 'float'
@@ -248,21 +288,27 @@ export class Creature {
     if (this.heading.lengthSq() < 0.5) this.heading.set(1, 0, 0);
     this.phase = rng.range(0, Math.PI * 2);
     this.turnPhase = rng.range(0, Math.PI * 2);
-    this.jitterTimer = 0;
+    this.anim = { phase: this.phase, jitterTimer: 0 };
 
     planet.group.add(this.root);
   }
 
-  update(dt, elapsed, planet, playerLocalPosition) {
+  update(dt, elapsed, planet, playerLocalPosition, flags) {
     const meta = this.meta;
     let speed = this.speed;
 
-    // Shy: ground creatures run from the player
-    if (playerLocalPosition && meta.mode !== 'float') {
-      const away = this.root.position.clone().sub(playerLocalPosition);
-      if (away.lengthSq() < 49) {
-        away.addScaledVector(this.direction, -away.dot(this.direction));
-        if (away.lengthSq() > 1e-4) this.heading.copy(away.normalize());
+    if (playerLocalPosition) {
+      const offset = this.root.position.clone().sub(playerLocalPosition);
+      const distanceSq = offset.lengthSq();
+      if (flags?.luring && distanceSq < 196 && distanceSq > 4) {
+        // A treat is on offer: approach the player instead of wandering
+        const toward = offset.negate();
+        toward.addScaledVector(this.direction, -toward.dot(this.direction));
+        if (toward.lengthSq() > 1e-4) this.heading.copy(toward.normalize());
+      } else if (!flags?.noFlee && !flags?.luring && meta.mode !== 'float' && distanceSq < 49) {
+        // Shy: ground creatures run from the player
+        offset.addScaledVector(this.direction, -offset.dot(this.direction));
+        if (offset.lengthSq() > 1e-4) this.heading.copy(offset.normalize());
         speed *= 2.2;
       }
     }
@@ -291,38 +337,6 @@ export class Creature {
     const right = new THREE.Vector3().crossVectors(this.direction, this.heading);
     this.root.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, this.direction, this.heading));
 
-    this.animate(dt, elapsed, speed);
-  }
-
-  animate(dt, elapsed, speed) {
-    const meta = this.meta;
-    this.phase += dt * speed * 2.2;
-    if (meta.legs) {
-      meta.legs.forEach((pivot, i) => {
-        pivot.rotation.x = Math.sin(this.phase + (i % 2) * Math.PI) * 0.55;
-      });
-    }
-    if (meta.wings) {
-      for (const { pivot, side } of meta.wings) {
-        pivot.rotation.z = side * (0.4 + Math.sin(elapsed * 10 + this.phase) * 0.5);
-      }
-    }
-    if (meta.pulse) {
-      meta.pulse.scale.y = meta.pulse.scale.y * 0.9 + (0.7 + Math.sin(elapsed * 3 + this.phase) * 0.08) * 0.1;
-    }
-    if (meta.spin) meta.spin.rotation.y += dt * 1.5;
-    if (meta.waddlePart) meta.waddlePart.rotation.z = Math.sin(this.phase) * 0.16;
-    if (meta.jitterParts) {
-      this.jitterTimer -= dt;
-      if (this.jitterTimer <= 0) {
-        this.jitterTimer = 0.25;
-        for (const part of meta.jitterParts) {
-          part.position.x += (Math.random() - 0.5) * 0.2;
-          part.position.y += (Math.random() - 0.5) * 0.2;
-          part.position.z += (Math.random() - 0.5) * 0.2;
-          part.position.clampLength(0, 0.5);
-        }
-      }
-    }
+    animateCreatureParts(this.meta, this.anim, dt, elapsed, speed);
   }
 }

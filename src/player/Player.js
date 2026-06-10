@@ -3,11 +3,11 @@ import { setJetpack, playSplash, playBounce } from '../core/audio.js';
 
 const WALK_SPEED = 9;
 const RUN_SPEED = 15;
-const JUMP_SPEED = 13;
-const SURFACE_GRAVITY = 32;
+const JUMP_SPEED = 15;
+const SURFACE_GRAVITY = 42;
 const GRAVITY_FALLOFF_EXPONENT = 1.35;
-const DEEP_SPACE_GRAVITY = 3;
-const JET_UP_ACCEL = 46;
+const DEEP_SPACE_GRAVITY = 5;
+const JET_UP_ACCEL = 58;
 const JET_THRUST_ACCEL = 30;
 const BOOST_MULTIPLIER = 2.4;
 const AIR_SPEED_CAP = 40;
@@ -28,7 +28,7 @@ const SWIM_VERTICAL_ACCEL = 16;
 const WATER_DRAG = 1.6;
 const BUOYANCY_ACCEL = 9;
 const FLOAT_LINE = 0.35;
-const HAZARD_BOUNCE_SPEED = 20;
+const HAZARD_BOUNCE_SPEED = 24;
 
 export class Player {
   constructor(scene) {
@@ -43,6 +43,9 @@ export class Player {
     this.jetting = false;
     this.swimming = false;
     this.fuel = MAX_FUEL;
+    this.treats = 0;
+    this.luring = false;
+    this.perks = {};
 
     this.keys = {};
     this.jumpQueued = false;
@@ -166,6 +169,7 @@ export class Player {
     let distance = toCenter.length();
     this.up.copy(toCenter).multiplyScalar(-1 / distance);
 
+    this.luring = !!this.keys.KeyF && this.treats > 0;
     const boosting = !!(this.keys.ShiftLeft || this.keys.ShiftRight);
     const forwardTangent = cameraForward.clone().addScaledVector(this.up, -cameraForward.dot(this.up));
     if (forwardTangent.lengthSq() < 1e-6) forwardTangent.set(1, 0, 0);
@@ -204,15 +208,16 @@ export class Player {
 
     if (this.swimming) {
       this.grounded = false;
-      this.fuel = Math.min(MAX_FUEL, this.fuel + FUEL_RECHARGE * 0.6 * dt);
+      this.fuel = Math.min(MAX_FUEL, this.fuel + FUEL_RECHARGE * 0.6 * (this.perks.rechargeMult || 1) * dt);
 
       const moveDirection = new THREE.Vector3()
         .addScaledVector(forwardTangent, moveZ)
         .addScaledVector(right, moveX);
+      const swimMult = this.perks.swimMult || 1;
       const moving = moveDirection.lengthSq() > 0;
       if (moving) {
         moveDirection.normalize();
-        this.velocity.addScaledVector(moveDirection, SWIM_ACCEL * dt);
+        this.velocity.addScaledVector(moveDirection, SWIM_ACCEL * swimMult * dt);
         this.facing.copy(moveDirection);
       }
 
@@ -234,10 +239,11 @@ export class Player {
       }
 
       this.velocity.multiplyScalar(Math.exp(-WATER_DRAG * dt));
-      if (this.velocity.length() > SWIM_SPEED * 2) this.velocity.setLength(SWIM_SPEED * 2);
+      const swimCap = SWIM_SPEED * 2 * swimMult;
+      if (this.velocity.length() > swimCap) this.velocity.setLength(swimCap);
       this.walkCycle += dt * (moving ? 7 : 2);
     } else if (this.grounded) {
-      this.fuel = Math.min(MAX_FUEL, this.fuel + FUEL_RECHARGE * dt);
+      this.fuel = Math.min(MAX_FUEL, this.fuel + FUEL_RECHARGE * (this.perks.rechargeMult || 1) * dt);
 
       const moveDirection = new THREE.Vector3()
         .addScaledVector(forwardTangent, moveZ)
@@ -245,20 +251,22 @@ export class Player {
       const moving = moveDirection.lengthSq() > 0;
       if (moving) moveDirection.normalize();
 
-      const speed = boosting ? RUN_SPEED : WALK_SPEED;
+      const speed = boosting ? RUN_SPEED * (this.perks.runMult || 1) : WALK_SPEED;
       this.velocity.copy(moveDirection).multiplyScalar(moving ? speed : 0);
       if (moving) this.facing.copy(moveDirection);
       this.walkCycle += dt * (moving ? speed * 1.4 : 0);
 
       if (this.jumpQueued) {
-        this.velocity.addScaledVector(this.up, JUMP_SPEED);
+        this.velocity.addScaledVector(this.up, JUMP_SPEED * (this.perks.jumpMult || 1));
         this.grounded = false;
       }
     } else {
-      const gravity = Math.max(
+      let gravity = Math.max(
         SURFACE_GRAVITY * Math.min(1.5, (planet.radius / distance) ** GRAVITY_FALLOFF_EXPONENT),
         DEEP_SPACE_GRAVITY
       );
+      // Mushroom-pet perk: drift down like a spore
+      if (this.perks.gravityMult && this.velocity.dot(this.up) < 0) gravity *= this.perks.gravityMult;
       this.velocity.addScaledVector(this.up, -gravity * dt);
 
       const thrustMultiplier = boosting ? BOOST_MULTIPLIER : 1;
@@ -280,10 +288,10 @@ export class Player {
         this.facing.copy(airForward).addScaledVector(this.up, -airForward.dot(this.up));
         if (this.facing.lengthSq() > 1e-6) this.facing.normalize();
       }
-      this.fuel = Math.max(0, this.fuel - burnRate * dt);
+      this.fuel = Math.max(0, this.fuel - burnRate * (this.perks.burnMult || 1) * dt);
 
       this.velocity.multiplyScalar(Math.exp(-AIR_DRAG * dt));
-      const speedCap = boosting ? BOOST_SPEED_CAP : AIR_SPEED_CAP;
+      const speedCap = boosting ? BOOST_SPEED_CAP * (this.perks.boostCapMult || 1) : AIR_SPEED_CAP;
       if (this.velocity.length() > speedCap) this.velocity.setLength(speedCap);
     }
     this.jumpQueued = false;
