@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createRng } from '../core/rng.js';
-import { PLANET_TYPES } from '../planets/types.js';
+import { PLANET_TYPES, SANCTUARY_TYPE } from '../planets/types.js';
 import { Planet } from '../planets/Planet.js';
 
 const PLANET_COUNT = 8;
@@ -26,6 +26,12 @@ export class SolarSystem {
       const j = rng.int(0, i);
       [typePool[i], typePool[j]] = [typePool[j], typePool[i]];
     }
+    // Every system gets exactly one Machine World
+    const mechIndex = typePool.findIndex((t) => t.id === 'mech');
+    if (mechIndex >= PLANET_COUNT) {
+      const swapTo = rng.int(0, PLANET_COUNT - 1);
+      [typePool[swapTo], typePool[mechIndex]] = [typePool[mechIndex], typePool[swapTo]];
+    }
 
     for (let i = 0; i < PLANET_COUNT; i++) {
       const typeDef = typePool[i % typePool.length];
@@ -45,6 +51,23 @@ export class SolarSystem {
       this.planets.push(planet);
       this.group.add(planet.group);
     }
+
+    // The sanctuary moon: a small, gentle world on a close orbit where
+    // released pets live.
+    this.sanctuaryPlanet = new Planet(SANCTUARY_TYPE, {
+      seed: rng.int(0, 0xfffffff),
+      radius: 13,
+      orbitRadius: 80,
+      orbitSpeed: 0.025,
+      orbitPhase: rng.range(0, Math.PI * 2),
+      orbitIndex: 0,
+      inclination: 0.35,
+      spinAxis: new THREE.Vector3(0.1, 1, 0.1).normalize(),
+      spinSpeed: 0.03,
+      name: 'Haven',
+    });
+    this.planets.push(this.sanctuaryPlanet);
+    this.group.add(this.sanctuaryPlanet.group);
   }
 
   update(dt, elapsed, playerWorldPosition, creatureFlags) {

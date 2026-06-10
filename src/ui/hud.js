@@ -19,6 +19,8 @@ export class Hud {
     this.discoveries = new Map();
     this.pets = [];
     this.activePetIndex = -1;
+    this.onSummonPet = null;
+    this.onReleasePet = null;
 
     setTimeout(() => this.hint.classList.add('faded'), 14000);
   }
@@ -47,8 +49,8 @@ export class Hud {
     this.fuelWrap.classList.toggle('full', fraction > 0.999);
   }
 
-  setTreats(count) {
-    this.treatCount.innerHTML = `Treats: ${count} · hold <span>F</span> near a creature`;
+  setTreats(treats, scrap) {
+    this.treatCount.innerHTML = `Treats: ${treats} · Scrap: ${scrap} · hold <span>F</span> to feed`;
   }
 
   setActivePet(pet, perkLabel) {
@@ -104,13 +106,40 @@ export class Hud {
       const heading = document.createElement('h3');
       heading.textContent = `Pets (${this.pets.length})`;
       const hint = document.createElement('small');
-      hint.textContent = 'P to cycle';
+      hint.textContent = 'click to summon · P to cycle';
       heading.appendChild(hint);
       const list = document.createElement('ul');
       this.pets.forEach((pet, index) => {
         const row = document.createElement('li');
-        row.textContent = `${pet.species} — from ${pet.origin}`;
         if (index === this.activePetIndex) row.className = 'active-pet';
+
+        const label = document.createElement('span');
+        label.className = 'pet-label';
+        label.textContent = `${pet.species} — from ${pet.origin}`;
+
+        const summon = document.createElement('button');
+        summon.className = 'pet-btn';
+        summon.textContent = index === this.activePetIndex ? 'Active' : 'Summon';
+        summon.disabled = index === this.activePetIndex;
+        summon.addEventListener('click', () => this.onSummonPet?.(index));
+
+        const release = document.createElement('button');
+        release.className = 'pet-btn release';
+        release.textContent = 'Release';
+        release.addEventListener('click', () => {
+          if (release.dataset.confirm) {
+            this.onReleasePet?.(index);
+          } else {
+            release.dataset.confirm = '1';
+            release.textContent = 'Sure?';
+            setTimeout(() => {
+              release.dataset.confirm = '';
+              release.textContent = 'Release';
+            }, 2500);
+          }
+        });
+
+        row.append(label, summon, release);
         list.appendChild(row);
       });
       section.appendChild(heading);
@@ -147,6 +176,11 @@ export class Hud {
 
   toggleLog() {
     this.logPanel.classList.toggle('open');
+    return this.isLogOpen();
+  }
+
+  isLogOpen() {
+    return this.logPanel.classList.contains('open');
   }
 
   reset() {

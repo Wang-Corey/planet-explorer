@@ -1,16 +1,33 @@
 import * as THREE from 'three';
 import { createRng } from '../core/rng.js';
+import { PLANET_TYPES, SANCTUARY_TYPE } from './types.js';
 
-// Each archetype builder returns a Group whose userData describes how the
-// shared Creature brain should move and animate it:
-//   mode: 'walk' | 'hop' | 'float'
-//   speed, bodyHeight, plus optional animation hooks:
-//   legs (pivots that swing), wings (pivots that flap), pulse (mesh that
-//   breathes), spin (mesh that rotates), jitterParts (meshes that teleport),
-//   waddlePart (group that rocks side to side)
+// Procedural creature generator: every species is assembled from seeded part
+// pools (bodies, legs, eyes, tails, fins, antennae, biome growths) instead of
+// fixed Earth-like archetypes. Machine Worlds roll angular chassis with piston
+// legs and sensor lenses. ~10% of species come out 'radiant'.
+//
+// The returned Group's userData carries the animation hooks consumed by
+// animateCreatureParts: { mode, speed, bodyHeight, legs, wings, pulse, spin,
+// jitterParts, radiant }.
 
-function material(color, options = {}) {
-  return new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.8, ...options });
+const TYPE_BY_ID = new Map([...PLANET_TYPES, SANCTUARY_TYPE].map((t) => [t.id, t]));
+
+let sparkleTexture = null;
+
+function getSparkleTexture() {
+  if (sparkleTexture) return sparkleTexture;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gradient.addColorStop(0, 'rgba(255,255,255,0.95)');
+  gradient.addColorStop(0.35, 'rgba(255,255,255,0.3)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 64, 64);
+  sparkleTexture = new THREE.CanvasTexture(canvas);
+  return sparkleTexture;
 }
 
 function add(parent, geometry, mat, x = 0, y = 0, z = 0) {
@@ -20,224 +37,307 @@ function add(parent, geometry, mat, x = 0, y = 0, z = 0) {
   return mesh;
 }
 
-function legPivot(parent, x, y, z, length, radius, mat) {
+function pivotAt(parent, x, y, z) {
   const pivot = new THREE.Group();
   pivot.position.set(x, y, z);
-  add(pivot, new THREE.CylinderGeometry(radius, radius * 0.8, length, 5), mat, 0, -length / 2, 0);
   parent.add(pivot);
   return pivot;
 }
 
-const ARCHETYPES = {
-  desert(rng) {
-    const root = new THREE.Group();
-    const hide = material(rng.pick(['#d9a05b', '#c2823f', '#e8c890']));
-    const body = add(root, new THREE.SphereGeometry(0.5, 8, 6), hide);
-    body.scale.set(0.9, 0.8, 1.2);
-    add(root, new THREE.CylinderGeometry(0.09, 0.13, 1.0, 5), hide, 0, 0.5, 0.45).rotation.x = 0.5;
-    add(root, new THREE.SphereGeometry(0.2, 7, 5), hide, 0, 0.95, 0.75);
-    add(root, new THREE.ConeGeometry(0.07, 0.35, 5), material('#6b4a2a'), 0, 0.92, 1.0).rotation.x = Math.PI / 2;
-    const legs = [
-      legPivot(root, -0.22, -0.25, 0, 1.3, 0.07, hide),
-      legPivot(root, 0.22, -0.25, 0, 1.3, 0.07, hide),
-    ];
-    root.userData = { mode: 'walk', speed: 3.2, bodyHeight: 1.6, legs };
-    return root;
-  },
+function shiftColor(rng, hex, lift = 0.12) {
+  const color = new THREE.Color(hex);
+  color.offsetHSL(rng.range(-0.05, 0.05), rng.range(0, 0.2), rng.range(0.02, lift));
+  return color;
+}
 
-  ocean(rng) {
-    const root = new THREE.Group();
-    const shell = material(rng.pick(['#e85a4f', '#ff8c5a', '#cf5a8f']));
-    const body = add(root, new THREE.SphereGeometry(0.55, 8, 6), shell);
-    body.scale.set(1.3, 0.55, 1);
-    add(root, new THREE.SphereGeometry(0.22, 6, 5), shell, -0.6, 0.05, 0.45);
-    add(root, new THREE.SphereGeometry(0.22, 6, 5), shell, 0.6, 0.05, 0.45);
-    for (const side of [-1, 1]) {
-      const stalk = add(root, new THREE.CylinderGeometry(0.04, 0.04, 0.35, 4), shell, side * 0.18, 0.4, 0.3);
-      add(stalk, new THREE.SphereGeometry(0.09, 6, 5), material('#1a1a2e'), 0, 0.22, 0);
+class PartKit {
+  constructor(rng, typeDef, radiant) {
+    this.rng = rng;
+    this.mech = typeDef.id === 'mech';
+    if (radiant) {
+      this.base = new THREE.Color().setHSL(rng.next(), 0.85, 0.62);
+      this.accent = new THREE.Color().setHSL(rng.next(), 0.9, 0.68);
+    } else if (this.mech) {
+      this.base = shiftColor(rng, rng.pick(['#8a929c', '#6a7280', '#aab4c0', '#7a6552']), 0.05);
+      this.accent = new THREE.Color(rng.pick(['#16f0c8', '#ffd24f', '#ff5a3a']));
+    } else {
+      const stops = typeDef.colorStops.map((s) => s[1]);
+      this.base = shiftColor(rng, rng.pick(stops));
+      this.accent = shiftColor(rng, typeDef.discovery?.color || '#ffe97f', 0.05);
     }
-    const legs = [];
-    for (let i = 0; i < 3; i++) {
-      for (const side of [-1, 1]) {
-        legs.push(legPivot(root, side * 0.6, -0.05, -0.3 + i * 0.3, 0.5, 0.05, shell));
+    this.glowIntensity = radiant ? 0.85 : 0.45;
+
+    this.bodyMat = new THREE.MeshStandardMaterial({
+      color: this.base,
+      flatShading: true,
+      roughness: this.mech ? 0.35 : 0.75,
+      metalness: this.mech ? 0.7 : 0,
+      emissive: radiant ? this.base : 0x000000,
+      emissiveIntensity: radiant ? 0.4 : 0,
+    });
+    this.glowMat = new THREE.MeshStandardMaterial({
+      color: this.accent,
+      emissive: this.accent,
+      emissiveIntensity: this.glowIntensity,
+      roughness: 0.4,
+      flatShading: true,
+    });
+  }
+
+  segmentGeometry(radius) {
+    return this.mech
+      ? new THREE.BoxGeometry(radius * 1.7, radius * 1.4, radius * 1.9)
+      : new THREE.SphereGeometry(radius, 8, 6);
+  }
+}
+
+function buildBody(root, rng, kit) {
+  const plan = rng.pick(kit.mech ? ['segmented', 'slab', 'segmented'] : ['blob', 'segmented', 'tall', 'blob']);
+  const radius = rng.range(0.35, 0.6);
+  const bodyMeshes = [];
+
+  if (plan === 'blob') {
+    const body = add(root, kit.segmentGeometry(radius * 1.3), kit.bodyMat);
+    body.scale.set(rng.range(0.8, 1.3), rng.range(0.6, 1.1), rng.range(0.9, 1.5));
+    bodyMeshes.push(body);
+  } else if (plan === 'slab') {
+    const body = add(root, new THREE.BoxGeometry(radius * 2.2, radius * 1.4, radius * 3), kit.bodyMat);
+    bodyMeshes.push(body);
+  } else if (plan === 'segmented') {
+    const segments = rng.int(2, 4);
+    for (let i = 0; i < segments; i++) {
+      const segmentRadius = radius * (1 - i * 0.18);
+      bodyMeshes.push(add(root, kit.segmentGeometry(segmentRadius), kit.bodyMat, 0, i * 0.06, -i * segmentRadius * 1.5));
+    }
+  } else {
+    const orbs = rng.int(2, 3);
+    for (let i = 0; i < orbs; i++) {
+      bodyMeshes.push(add(root, kit.segmentGeometry(radius * (1 - i * 0.22)), kit.bodyMat, 0, i * radius * 1.4, 0));
+    }
+  }
+  return { plan, radius, bodyMeshes, frontZ: radius * 1.2, topY: plan === 'tall' ? radius * 2.6 : radius * 0.8 };
+}
+
+function buildLegs(root, rng, kit, body) {
+  const options = kit.mech ? [2, 4, 4, 4, 6] : [0, 2, 2, 3, 4, 4, 6, 8];
+  const legCount = rng.pick(options);
+  if (legCount === 0) return { legs: [], legLength: 0 };
+
+  const legLength = rng.range(0.5, kit.mech ? 1.6 : 1.3);
+  const legRadius = rng.range(0.04, 0.09);
+  const legs = [];
+  const rows = Math.max(1, Math.floor(legCount / 2));
+  for (let i = 0; i < legCount; i++) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const row = Math.floor(i / 2);
+    const z = rows > 1 ? (row / (rows - 1) - 0.5) * body.radius * 2.2 : 0;
+    const pivot = pivotAt(root, side * body.radius * 0.8, -body.radius * 0.3, z);
+    add(pivot, new THREE.CylinderGeometry(legRadius, legRadius * 0.7, legLength, 5), kit.bodyMat, 0, -legLength / 2, 0);
+    if (kit.mech) {
+      add(pivot, new THREE.SphereGeometry(legRadius * 1.8, 6, 5), kit.glowMat, 0, -legLength / 2, 0);
+      add(pivot, new THREE.BoxGeometry(legRadius * 4, legRadius * 1.5, legRadius * 5), kit.bodyMat, 0, -legLength, legRadius);
+    }
+    legs.push(pivot);
+  }
+  return { legs, legLength };
+}
+
+function buildHeadAndEyes(root, rng, kit, body) {
+  const hasHead = rng.chance(0.75);
+  let eyeAnchor = body.bodyMeshes[0];
+  let anchorOffset = new THREE.Vector3(0, body.radius * 0.2, body.frontZ * 0.8);
+
+  if (hasHead) {
+    const neckLength = rng.range(0, 1.1);
+    const headRadius = body.radius * rng.range(0.45, 0.7);
+    const headY = body.topY + neckLength * 0.8;
+    const headZ = body.frontZ * 0.7;
+    if (neckLength > 0.15) {
+      const neck = add(root, new THREE.CylinderGeometry(headRadius * 0.4, headRadius * 0.55, neckLength, 5), kit.bodyMat, 0, body.topY * 0.6 + neckLength / 2, headZ * 0.8);
+      neck.rotation.x = 0.3;
+    }
+    const head = add(
+      root,
+      kit.mech ? new THREE.BoxGeometry(headRadius * 1.8, headRadius * 1.4, headRadius * 2) : new THREE.SphereGeometry(headRadius, 8, 6),
+      kit.bodyMat, 0, headY, headZ
+    );
+    eyeAnchor = head;
+    anchorOffset = new THREE.Vector3(0, 0, headRadius * 0.8);
+  }
+
+  if (kit.mech) {
+    // Single sensor lens, Mechanoceros style
+    const lens = add(eyeAnchor, new THREE.CylinderGeometry(0.1, 0.12, 0.06, 8), kit.glowMat, anchorOffset.x, anchorOffset.y, anchorOffset.z);
+    lens.rotation.x = Math.PI / 2;
+  } else {
+    const eyeCount = rng.int(1, 4);
+    const stalked = rng.chance(0.4);
+    for (let i = 0; i < eyeCount; i++) {
+      const spread = eyeCount > 1 ? (i / (eyeCount - 1) - 0.5) * 0.4 : 0;
+      if (stalked) {
+        const stalk = add(eyeAnchor, new THREE.CylinderGeometry(0.025, 0.035, 0.35, 4), kit.bodyMat, spread, anchorOffset.y + 0.2, anchorOffset.z * 0.6);
+        stalk.rotation.x = -0.4;
+        add(stalk, new THREE.SphereGeometry(0.07, 6, 5), kit.glowMat, 0, 0.2, 0);
+      } else {
+        add(eyeAnchor, new THREE.SphereGeometry(0.07, 6, 5), kit.glowMat, spread, anchorOffset.y, anchorOffset.z);
       }
     }
-    root.userData = { mode: 'walk', speed: 2.2, bodyHeight: 0.55, legs };
-    return root;
-  },
+  }
+}
 
-  toxic(rng) {
-    const root = new THREE.Group();
-    const slime = material(rng.pick(['#8fbf3f', '#6b8f2a', '#9a6bbf']), { roughness: 0.4 });
-    const body = add(root, new THREE.SphereGeometry(0.55, 8, 6), slime);
-    body.scale.set(1, 0.6, 1.4);
-    add(root, new THREE.SphereGeometry(0.3, 7, 5), slime, 0, 0.1, -0.8).scale.set(1, 0.6, 1);
-    for (const side of [-1, 1]) {
-      const stalk = add(root, new THREE.CylinderGeometry(0.05, 0.06, 0.5, 4), slime, side * 0.2, 0.45, 0.4);
-      stalk.rotation.z = -side * 0.3;
-      add(stalk, new THREE.SphereGeometry(0.11, 6, 5), material('#c6ff4f', { emissive: '#c6ff4f', emissiveIntensity: 0.6 }), 0, 0.3, 0);
-    }
-    root.userData = { mode: 'walk', speed: 1.2, bodyHeight: 0.4, legs: [], pulse: body };
-    return root;
-  },
+function buildExtras(root, rng, kit, body, mode) {
+  const meta = { wings: null, pulse: null, spin: null, jitterParts: null, legsExtra: [] };
+  const pool = ['tail', 'horns', 'antennae', 'wings', 'spines', 'growth'];
+  if (mode === 'float') pool.push('tentacles', 'tentacles');
+  const picks = rng.int(1, 3);
 
-  fairy(rng) {
-    const root = new THREE.Group();
-    const glow = rng.pick(['#ffd6fa', '#b8a0ff', '#a0e8ff']);
-    add(root, new THREE.CapsuleGeometry(0.14, 0.3, 3, 6), material('#5a4a6b')).rotation.x = Math.PI / 2;
-    const wings = [];
-    for (const side of [-1, 1]) {
-      const pivot = new THREE.Group();
-      pivot.position.set(side * 0.1, 0.05, 0);
-      const wing = add(pivot, new THREE.BoxGeometry(0.7, 0.02, 0.45), material(glow, { emissive: glow, emissiveIntensity: 0.5, transparent: true, opacity: 0.85 }), side * 0.38, 0, 0);
-      wing.rotation.y = side * 0.2;
-      root.add(pivot);
-      wings.push({ pivot, side });
+  for (let i = 0; i < picks; i++) {
+    switch (rng.pick(pool)) {
+      case 'tail': {
+        const links = rng.int(2, 4);
+        for (let j = 0; j < links; j++) {
+          const linkRadius = body.radius * (0.5 - j * 0.1);
+          if (linkRadius <= 0.05) break;
+          add(root, kit.segmentGeometry(linkRadius), kit.bodyMat, 0, body.radius * 0.1 + j * 0.05, -body.frontZ - (j + 1) * linkRadius * 1.6);
+        }
+        break;
+      }
+      case 'horns': {
+        const pairs = rng.int(1, 2);
+        for (let j = 0; j < pairs; j++) {
+          for (const side of [-1, 1]) {
+            const horn = add(root, new THREE.ConeGeometry(0.06, rng.range(0.25, 0.6), 5), kit.mech ? kit.glowMat : kit.bodyMat, side * (0.15 + j * 0.12), body.topY + 0.15, body.frontZ * 0.4);
+            horn.rotation.z = -side * 0.5;
+          }
+        }
+        break;
+      }
+      case 'antennae': {
+        for (const side of [-1, 1]) {
+          const stalk = add(root, new THREE.CylinderGeometry(0.02, 0.03, 0.6, 4), kit.bodyMat, side * 0.12, body.topY + 0.25, body.frontZ * 0.3);
+          stalk.rotation.z = -side * 0.35;
+          add(stalk, new THREE.SphereGeometry(0.06, 5, 4), kit.glowMat, 0, 0.33, 0);
+        }
+        break;
+      }
+      case 'wings': {
+        meta.wings = [];
+        for (const side of [-1, 1]) {
+          const pivot = pivotAt(root, side * body.radius * 0.7, body.topY * 0.6, 0);
+          const wingMat = kit.mech ? kit.bodyMat : new THREE.MeshStandardMaterial({
+            color: kit.accent, emissive: kit.accent, emissiveIntensity: 0.4,
+            transparent: true, opacity: 0.8, flatShading: true, side: THREE.DoubleSide,
+          });
+          add(pivot, new THREE.BoxGeometry(rng.range(0.5, 0.9), 0.03, rng.range(0.3, 0.55)), wingMat, side * 0.3, 0, 0);
+          meta.wings.push({ pivot, side });
+        }
+        break;
+      }
+      case 'spines': {
+        const count = rng.int(3, 5);
+        for (let j = 0; j < count; j++) {
+          add(root, new THREE.ConeGeometry(0.07, rng.range(0.2, 0.45), 4), kit.glowMat, 0, body.topY * 0.9, body.frontZ - j * (body.frontZ * 2.2) / count);
+        }
+        break;
+      }
+      case 'tentacles': {
+        const count = rng.int(3, 5);
+        for (let j = 0; j < count; j++) {
+          const angle = (j / count) * Math.PI * 2;
+          const pivot = pivotAt(root, Math.cos(angle) * body.radius * 0.5, -body.radius * 0.4, Math.sin(angle) * body.radius * 0.5);
+          add(pivot, new THREE.CylinderGeometry(0.035, 0.015, rng.range(0.5, 0.9), 4), kit.bodyMat, 0, -0.35, 0);
+          meta.legsExtra.push(pivot);
+        }
+        break;
+      }
+      case 'growth': {
+        const growthGeometry = kit.mech
+          ? new THREE.CylinderGeometry(0.07, 0.09, 0.45, 6)
+          : rng.pick([
+            new THREE.OctahedronGeometry(0.14, 0),
+            new THREE.SphereGeometry(0.12, 6, 5),
+            new THREE.ConeGeometry(0.1, 0.3, 5),
+            new THREE.BoxGeometry(0.16, 0.16, 0.16),
+          ]);
+        const clusters = rng.int(2, 4);
+        for (let j = 0; j < clusters; j++) {
+          add(root, growthGeometry.clone(), kit.glowMat, rng.range(-0.3, 0.3), body.topY * rng.range(0.6, 1.1), rng.range(-body.frontZ, body.frontZ));
+        }
+        growthGeometry.dispose();
+        break;
+      }
     }
-    root.userData = { mode: 'float', speed: 2.6, bodyHeight: 0.3, wings };
-    return root;
-  },
+  }
+  return meta;
+}
 
-  ice(rng) {
-    const root = new THREE.Group();
-    const waddlePart = new THREE.Group();
-    root.add(waddlePart);
-    const coat = material(rng.pick(['#2a3a4a', '#3a4a5d', '#1d2b3a']));
-    const body = add(waddlePart, new THREE.CapsuleGeometry(0.35, 0.4, 4, 8), coat, 0, 0.15, 0);
-    body.scale.set(1, 1, 0.9);
-    add(waddlePart, new THREE.SphereGeometry(0.28, 8, 6), material('#f0f4f8'), 0, 0.1, 0.18).scale.set(0.85, 1.1, 0.7);
-    add(waddlePart, new THREE.ConeGeometry(0.07, 0.25, 5), material('#ff9a3f'), 0, 0.55, 0.35).rotation.x = Math.PI / 2;
-    const wings = [];
-    for (const side of [-1, 1]) {
-      const pivot = new THREE.Group();
-      pivot.position.set(side * 0.36, 0.25, 0);
-      add(pivot, new THREE.BoxGeometry(0.1, 0.45, 0.2), coat, 0, -0.2, 0);
-      waddlePart.add(pivot);
-      wings.push({ pivot, side });
-    }
-    root.userData = { mode: 'walk', speed: 1.8, bodyHeight: 0.5, legs: [], wings, waddlePart };
-    return root;
-  },
-
-  lava(rng) {
-    const root = new THREE.Group();
-    const rock = material('#2b2222');
-    const shell = add(root, new THREE.SphereGeometry(0.6, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2), rock);
-    shell.scale.set(1.1, 0.8, 1.3);
-    const core = add(root, new THREE.SphereGeometry(0.42, 8, 6), material('#ff6a00', { emissive: '#ff6a00', emissiveIntensity: 1.2 }), 0, -0.05, 0);
-    core.scale.set(1, 0.5, 1.15);
-    add(root, new THREE.SphereGeometry(0.18, 6, 5), rock, 0, 0.05, 0.75);
-    const legs = [];
-    for (const side of [-1, 1]) {
-      legs.push(legPivot(root, side * 0.5, -0.1, 0.35, 0.4, 0.06, rock));
-      legs.push(legPivot(root, side * 0.5, -0.1, -0.35, 0.4, 0.06, rock));
-    }
-    root.userData = { mode: 'walk', speed: 1.3, bodyHeight: 0.5, legs, pulse: core };
-    return root;
-  },
-
-  forest(rng) {
-    const root = new THREE.Group();
-    const fur = material(rng.pick(['#8f6b4a', '#6b5a3a', '#a8825d']));
-    const body = add(root, new THREE.CapsuleGeometry(0.3, 0.7, 4, 8), fur, 0, 0.1, 0);
-    body.rotation.x = Math.PI / 2;
-    add(root, new THREE.CylinderGeometry(0.1, 0.12, 0.6, 5), fur, 0, 0.5, 0.45).rotation.x = 0.45;
-    const head = add(root, new THREE.SphereGeometry(0.18, 7, 5), fur, 0, 0.78, 0.62);
-    for (const side of [-1, 1]) {
-      add(head, new THREE.CylinderGeometry(0.025, 0.04, 0.45, 4), material('#d9c9a0'), side * 0.12, 0.28, -0.05).rotation.z = -side * 0.45;
-    }
-    const legs = [];
-    for (const side of [-1, 1]) {
-      legs.push(legPivot(root, side * 0.18, -0.05, 0.35, 0.85, 0.05, fur));
-      legs.push(legPivot(root, side * 0.18, -0.05, -0.35, 0.85, 0.05, fur));
-    }
-    root.userData = { mode: 'walk', speed: 3.4, bodyHeight: 0.95, legs };
-    return root;
-  },
-
-  mushroom(rng) {
-    const root = new THREE.Group();
-    const skin = material(rng.pick(['#9a7ab8', '#7a9ab8', '#b87a9a']), { roughness: 0.5 });
-    const body = add(root, new THREE.SphereGeometry(0.45, 8, 6), skin);
-    body.scale.set(1, 0.85, 1);
-    add(root, new THREE.SphereGeometry(0.22, 6, 5), skin, -0.38, -0.15, -0.1);
-    add(root, new THREE.SphereGeometry(0.22, 6, 5), skin, 0.38, -0.15, -0.1);
-    for (const side of [-1, 1]) {
-      add(root, new THREE.SphereGeometry(0.09, 6, 5), material('#fff0d6', { emissive: '#ffe97f', emissiveIntensity: 0.4 }), side * 0.18, 0.3, 0.35);
-    }
-    const cap = add(root, new THREE.SphereGeometry(0.22, 7, 5, 0, Math.PI * 2, 0, Math.PI / 2), material('#d6a0ff', { emissive: '#d6a0ff', emissiveIntensity: 0.4 }), 0, 0.38, -0.12);
-    cap.scale.set(1, 0.7, 1);
-    root.userData = { mode: 'hop', speed: 3.0, bodyHeight: 0.5, legs: [], pulse: body };
-    return root;
-  },
-
-  candy(rng) {
-    const root = new THREE.Group();
-    const gummy = material(rng.pick(['#ff5a8f', '#5ad6ff', '#8fff5a', '#ffdf5a']), { roughness: 0.3, transparent: true, opacity: 0.92 });
-    add(root, new THREE.SphereGeometry(0.4, 8, 6), gummy, 0, 0.1, 0).scale.set(1, 1.1, 0.8);
-    const head = add(root, new THREE.SphereGeometry(0.28, 8, 6), gummy, 0, 0.7, 0);
-    add(head, new THREE.SphereGeometry(0.1, 6, 5), gummy, -0.18, 0.22, 0);
-    add(head, new THREE.SphereGeometry(0.1, 6, 5), gummy, 0.18, 0.22, 0);
-    const legs = [
-      legPivot(root, -0.18, -0.25, 0, 0.35, 0.09, gummy),
-      legPivot(root, 0.18, -0.25, 0, 0.35, 0.09, gummy),
-    ];
-    const wings = [];
-    for (const side of [-1, 1]) {
-      const pivot = new THREE.Group();
-      pivot.position.set(side * 0.4, 0.3, 0);
-      add(pivot, new THREE.CapsuleGeometry(0.08, 0.25, 3, 5), gummy, 0, -0.15, 0);
-      root.add(pivot);
-      wings.push({ pivot, side });
-    }
-    root.userData = { mode: 'walk', speed: 2.0, bodyHeight: 0.65, legs, wings };
-    return root;
-  },
-
-  crystal(rng) {
-    const root = new THREE.Group();
-    const tone = rng.pick(['#7fdfff', '#ff7fd6', '#b8a0ff']);
-    const core = add(root, new THREE.OctahedronGeometry(0.4, 0), material(tone, { emissive: tone, emissiveIntensity: 0.9, roughness: 0.2 }));
-    core.scale.set(1, 1.4, 1);
-    const legs = [];
-    for (let i = 0; i < 3; i++) {
-      const angle = (i / 3) * Math.PI * 2;
-      const pivot = new THREE.Group();
-      pivot.position.set(Math.cos(angle) * 0.2, -0.3, Math.sin(angle) * 0.2);
-      add(pivot, new THREE.CylinderGeometry(0.02, 0.015, 0.7, 4), material(tone, { emissive: tone, emissiveIntensity: 0.4 }), 0, -0.35, 0);
-      root.add(pivot);
-      legs.push(pivot);
-    }
-    root.userData = { mode: 'float', speed: 1.6, bodyHeight: 0.6, legs, spin: core };
-    return root;
-  },
-
-  glitch(rng) {
-    const root = new THREE.Group();
-    const jitterParts = [];
-    const colors = ['#ff2bd6', '#2bffd6', '#ffffff'];
-    for (let i = 0; i < 3; i++) {
-      const size = 0.32 - i * 0.07;
-      const cube = add(
-        root,
-        new THREE.BoxGeometry(size, size, size),
-        material(colors[i], { emissive: colors[i], emissiveIntensity: 0.9 }),
-        rng.range(-0.25, 0.25), rng.range(-0.2, 0.3), rng.range(-0.25, 0.25)
-      );
-      jitterParts.push(cube);
-    }
-    root.userData = { mode: 'float', speed: 2.4, bodyHeight: 0.4, jitterParts };
-    return root;
-  },
-};
-
-// Deterministic visual from a seed, so a tamed pet can be rebuilt
-// identically from its saved record.
 export function buildCreatureVisual(typeId, seed) {
+  const typeDef = TYPE_BY_ID.get(typeId) || PLANET_TYPES[0];
   const rng = createRng(seed);
-  const root = ARCHETYPES[typeId](rng);
-  root.scale.setScalar(rng.range(0.8, 1.35));
-  return { root, rng };
+  const radiant = rng.chance(0.1);
+  const kit = new PartKit(rng, typeDef, radiant);
+  const root = new THREE.Group();
+
+  const body = buildBody(root, rng, kit);
+  const { legs, legLength } = buildLegs(root, rng, kit, body);
+
+  let mode;
+  let speed;
+  if (legs.length > 0) {
+    mode = 'walk';
+    speed = rng.range(1.5, 3.5);
+  } else if (rng.chance(0.45) && !kit.mech) {
+    mode = 'hop';
+    speed = rng.range(2.4, 3.6);
+    for (const side of [-1, 1]) {
+      add(root, new THREE.SphereGeometry(body.radius * 0.55, 7, 5), kit.bodyMat, side * body.radius * 0.8, -body.radius * 0.3, -body.radius * 0.4);
+    }
+  } else {
+    mode = 'float';
+    speed = rng.range(1.4, 2.8);
+  }
+
+  buildHeadAndEyes(root, rng, kit, body);
+  const extras = buildExtras(root, rng, kit, body, mode);
+  const allLegs = [...legs, ...extras.legsExtra];
+
+  let pulse = null;
+  if (!kit.mech && rng.chance(0.45)) pulse = body.bodyMeshes[0];
+
+  let jitterParts = null;
+  if (typeDef.id === 'glitch') {
+    jitterParts = body.bodyMeshes.slice(1);
+    if (jitterParts.length === 0) jitterParts = null;
+  }
+
+  if (radiant) {
+    const sparkle = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: getSparkleTexture(),
+      color: kit.accent,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }));
+    sparkle.scale.setScalar(2.6);
+    root.add(sparkle);
+  }
+
+  const bodyHeight = mode === 'float'
+    ? 0.5
+    : legLength + body.radius * 0.5 + 0.1;
+
+  root.userData = {
+    mode,
+    speed,
+    bodyHeight: Math.max(bodyHeight, 0.35),
+    legs: allLegs,
+    wings: extras.wings,
+    pulse,
+    spin: null,
+    jitterParts,
+    radiant,
+  };
+  return { root, rng, radiant };
 }
 
 export function animateCreatureParts(meta, state, dt, elapsed, speed) {
@@ -256,7 +356,6 @@ export function animateCreatureParts(meta, state, dt, elapsed, speed) {
     meta.pulse.scale.y = meta.pulse.scale.y * 0.9 + (0.7 + Math.sin(elapsed * 3 + state.phase) * 0.08) * 0.1;
   }
   if (meta.spin) meta.spin.rotation.y += dt * 1.5;
-  if (meta.waddlePart) meta.waddlePart.rotation.z = Math.sin(state.phase) * 0.16;
   if (meta.jitterParts) {
     state.jitterTimer -= dt;
     if (state.jitterTimer <= 0) {
@@ -265,20 +364,25 @@ export function animateCreatureParts(meta, state, dt, elapsed, speed) {
         part.position.x += (Math.random() - 0.5) * 0.2;
         part.position.y += (Math.random() - 0.5) * 0.2;
         part.position.z += (Math.random() - 0.5) * 0.2;
-        part.position.clampLength(0, 0.5);
+        part.position.clampLength(0, 0.6);
       }
     }
   }
 }
 
 export class Creature {
-  constructor(planet, seed) {
+  constructor(planet, seed, options = {}) {
     this.seed = seed;
-    const { root, rng } = buildCreatureVisual(planet.type.id, seed);
+    this.speciesIndex = options.speciesIndex ?? -1;
+    this.tame = !!options.tame;
+    const typeId = options.typeId || planet.type.id;
+    const { root } = buildCreatureVisual(typeId, seed);
     this.root = root;
     this.meta = root.userData;
-    this.bodyHeight = this.meta.bodyHeight * root.scale.x;
-    this.speed = this.meta.speed * rng.range(0.85, 1.2);
+    this.scale = options.scale || planet.rng.range(0.75, 1.3);
+    root.scale.setScalar(this.scale);
+    this.bodyHeight = this.meta.bodyHeight * this.scale;
+    this.speed = this.meta.speed * planet.rng.range(0.85, 1.2);
 
     const minElevation = planet.type.liquid && planet.type.liquidClass !== 'solid' && this.meta.mode !== 'float'
       ? planet.type.liquid.level + 0.04 : 0;
@@ -286,8 +390,8 @@ export class Creature {
     this.direction = spot.direction.clone();
     this.heading = new THREE.Vector3().randomDirection().cross(this.direction).normalize();
     if (this.heading.lengthSq() < 0.5) this.heading.set(1, 0, 0);
-    this.phase = rng.range(0, Math.PI * 2);
-    this.turnPhase = rng.range(0, Math.PI * 2);
+    this.phase = planet.rng.range(0, Math.PI * 2);
+    this.turnPhase = planet.rng.range(0, Math.PI * 2);
     this.anim = { phase: this.phase, jitterTimer: 0 };
 
     planet.group.add(this.root);
@@ -300,12 +404,13 @@ export class Creature {
     if (playerLocalPosition) {
       const offset = this.root.position.clone().sub(playerLocalPosition);
       const distanceSq = offset.lengthSq();
-      if (flags?.luring && distanceSq < 196 && distanceSq > 4) {
-        // A treat is on offer: approach the player instead of wandering
+      const drawn = (flags?.luring || this.tame) && distanceSq < 196 && distanceSq > 4;
+      if (drawn) {
+        // A treat is on offer (or this is an old friend): approach the player
         const toward = offset.negate();
         toward.addScaledVector(this.direction, -toward.dot(this.direction));
         if (toward.lengthSq() > 1e-4) this.heading.copy(toward.normalize());
-      } else if (!flags?.noFlee && !flags?.luring && meta.mode !== 'float' && distanceSq < 49) {
+      } else if (!this.tame && !flags?.noFlee && !flags?.luring && meta.mode !== 'float' && distanceSq < 49) {
         // Shy: ground creatures run from the player
         offset.addScaledVector(this.direction, -offset.dot(this.direction));
         if (offset.lengthSq() > 1e-4) this.heading.copy(offset.normalize());

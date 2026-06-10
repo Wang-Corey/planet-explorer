@@ -38,9 +38,9 @@ await page.keyboard.up('Shift');
 // Teleport next to a collectible and confirm the discovery loop fires
 const collectResult = await page.evaluate(() => {
   const { player, system } = window.__game;
-  const planet = system.nearestPlanetTo(player.position);
+  const planet = system.planets.find((p) => p.collectibles.some((i) => !i.collected));
+  if (!planet) return 'no planet with collectibles';
   const item = planet.collectibles.find((i) => !i.collected);
-  if (!item) return 'no collectible found';
   const worldPosition = item.mesh.position.clone()
     .applyQuaternion(planet.group.quaternion)
     .add(planet.group.position);
@@ -82,10 +82,22 @@ const swimState = await page.evaluate(() => ({
 console.log(`swim test: ${swimResult} ->`, JSON.stringify(swimState));
 await page.screenshot({ path: '/tmp/pe-swim.png' });
 
+// Structure checks: every system has a Machine World and the sanctuary moon
+const systemInfo = await page.evaluate(() => {
+  const { system } = window.__game;
+  return {
+    hasMech: system.planets.some((p) => p.type.id === 'mech'),
+    hasSanctuary: !!system.sanctuaryPlanet,
+    speciesPerPlanet: system.planets.filter((p) => p.type.creature).map((p) => p.species.length),
+    radiantSpecies: system.planets.flatMap((p) => p.species.filter((s) => s.radiant).map((s) => s.name)),
+  };
+});
+console.log('system test:', JSON.stringify(systemInfo));
+
 // Walk up to a creature and confirm the species scan registers
 const scanResult = await page.evaluate(() => {
   const { player, system } = window.__game;
-  const planet = system.planets.find((p) => p.creatures.length > 0 && !p.speciesScanned);
+  const planet = system.planets.find((p) => p.creatures.length > 0 && p.species.some((s) => !s.scanned));
   if (!planet) return 'no unscanned creatures';
   const creature = planet.creatures[0];
   const worldPosition = creature.root.position.clone()
@@ -96,14 +108,14 @@ const scanResult = await page.evaluate(() => {
   return `teleported to a ${planet.type.id} creature`;
 });
 await page.waitForTimeout(800);
-const scanned = await page.evaluate(() => window.__game.player.planet.speciesScanned);
+const scanned = await page.evaluate(() => window.__game.player.planet.species.some((s) => s.scanned));
 console.log(`scan test: ${scanResult} -> speciesScanned=${scanned}`);
 await page.screenshot({ path: '/tmp/pe-creature.png' });
 
 // Grab a treat, then lure-feed a creature and confirm it joins the pet collection
 const tameResult = await page.evaluate(() => {
   const { player, system, petManager } = window.__game;
-  const planet = system.planets.find((p) => p.creatures.length > 0);
+  const planet = system.planets.find((p) => p.creatures.length > 0 && p.type.baitKind !== 'scrap');
   if (!planet) return 'no creatures left';
   const bait = planet.baits.find((b) => !b.collected);
   if (bait) {
@@ -120,7 +132,7 @@ console.log(`bait test: ${tameResult} -> treats=${treats} (should be >0)`);
 await page.keyboard.down('f');
 await page.evaluate(() => {
   const { player, system } = window.__game;
-  const planet = system.planets.find((p) => p.creatures.length > 0);
+  const planet = system.planets.find((p) => p.creatures.length > 0 && p.type.baitKind !== 'scrap');
   const creature = planet.creatures[0];
   const creatureWorld = creature.root.position.clone().applyQuaternion(planet.group.quaternion).add(planet.group.position);
   player.position.copy(creatureWorld);
@@ -136,6 +148,31 @@ const petState = await page.evaluate(() => ({
 }));
 console.log('tame test:', JSON.stringify(petState));
 await page.screenshot({ path: '/tmp/pe-pet.png' });
+
+// Release the pet and confirm it moves to the sanctuary moon
+const releaseState = await page.evaluate(() => {
+  const { petManager, system, hud } = window.__game;
+  const before = system.sanctuaryPlanet.creatures.length;
+  hud.onReleasePet(0);
+  return {
+    petsLeft: petManager.pets.length,
+    sanctuarySaved: petManager.sanctuary.length,
+    havenResidents: system.sanctuaryPlanet.creatures.length - before,
+  };
+});
+console.log('release test:', JSON.stringify(releaseState));
+
+// Visit the mech planet for a look
+await page.evaluate(() => {
+  const { player, system } = window.__game;
+  const mech = system.planets.find((p) => p.type.id === 'mech');
+  const up = new player.position.constructor(0, 1, 0);
+  player.position.copy(mech.center).addScaledVector(up, mech.radius * 1.1 + 2);
+  player.velocity.set(0, 0, 0);
+  player.grounded = false;
+});
+await page.waitForTimeout(2500);
+await page.screenshot({ path: '/tmp/pe-mech.png' });
 
 // Jetpack fuel should drain while thrusting
 const fuelBefore = await page.evaluate(() => window.__game.player.fuel);

@@ -327,7 +327,66 @@ export const PLANET_TYPES = [
       suffixes: ['Fragment', 'Byte', 'Anomaly', 'Artifact', 'Segment', 'Key'],
     },
   },
+  {
+    id: 'mech',
+    label: 'Machine World',
+    shape: 'terraced',
+    noiseFrequency: 1.7,
+    amplitude: 0.1,
+    colorStops: [
+      [0.0, '#2e3138'],
+      [0.3, '#4a4f58'],
+      [0.5, '#16f0c8'],
+      [0.56, '#3a3e46'],
+      [0.75, '#6a5a48'],
+      [0.9, '#23262c'],
+    ],
+    liquid: { level: 0.3, color: '#10c8a8', opacity: 0.85, basin: 2, emissive: '#0a8f78', emissiveIntensity: 0.8 },
+    liquidClass: 'hazard',
+    baitKind: 'scrap',
+    creature: { count: [3, 5], prefixes: ['Servo', 'Cog', 'Chrome', 'Relay', 'Piston', 'Volt'], suffixes: ['Walker', 'Strider', 'Hound', 'Frame', 'Unit', 'Engine'] },
+    atmosphere: '#5af0d0',
+    particles: { color: '#ffd24f', count: 130, size: 0.5, height: 7 },
+    props: [
+      { builder: 'antenna', count: 35, minE: 0.35, maxE: 1.0 },
+      { builder: 'pipes', count: 40, minE: 0.32, maxE: 0.9 },
+      { builder: 'machineBlock', count: 35, minE: 0.32, maxE: 1.0 },
+    ],
+    discovery: {
+      color: '#ffd24f',
+      shape: 'gear',
+      prefixes: ['Servo', 'Flux', 'Gear', 'Circuit', 'Dynamo', 'Cipher'],
+      suffixes: ['Core', 'Coil', 'Rotor', 'Capacitor', 'Module', 'Spring'],
+    },
+  },
 ];
+
+// Not part of the random pool: every system gets exactly one sanctuary moon
+// where released pets live out their days.
+export const SANCTUARY_TYPE = {
+  id: 'sanctuary',
+  label: 'Sanctuary Moon',
+  shape: 'gentle',
+  noiseFrequency: 1.3,
+  amplitude: 0.08,
+  colorStops: [
+    [0.0, '#4a9a6a'],
+    [0.45, '#7fc26a'],
+    [0.62, '#9ad59a'],
+    [0.8, '#f3e7c9'],
+  ],
+  liquid: { level: 0.45, color: '#5ac8ff', opacity: 0.75, basin: 3, emissive: '#1d5a8f', emissiveIntensity: 0.2 },
+  liquidClass: 'swim',
+  creature: null,
+  atmosphere: '#aef4c8',
+  particles: { color: '#fff7a0', count: 140, size: 0.45, height: 5 },
+  props: [
+    { builder: 'glowFlower', count: 80, minE: 0.48, maxE: 0.95 },
+    { builder: 'leafyTree', count: 50, minE: 0.5, maxE: 0.85 },
+    { builder: 'rock', count: 20, minE: 0.5, maxE: 1.0, tint: '#9aa89a' },
+  ],
+  discovery: null,
+};
 
 const NAME_START = ['Zar', 'Veo', 'Quil', 'Ash', 'Bryn', 'Cor', 'Del', 'Eri', 'Fen', 'Gal', 'Hra', 'Ix', 'Jun', 'Kel', 'Lum', 'Mor', 'Nyx', 'Oph', 'Pra', 'Ryn', 'Sol', 'Tev', 'Ul', 'Vex', 'Wyn', 'Xan', 'Yor', 'Zen'];
 const NAME_MID = ['a', 'e', 'i', 'o', 'u', 'ae', 'ia', 'eo', 'ou', 'y'];

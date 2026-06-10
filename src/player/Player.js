@@ -44,6 +44,7 @@ export class Player {
     this.swimming = false;
     this.fuel = MAX_FUEL;
     this.treats = 0;
+    this.scrap = 0;
     this.luring = false;
     this.perks = {};
 
@@ -169,7 +170,9 @@ export class Player {
     let distance = toCenter.length();
     this.up.copy(toCenter).multiplyScalar(-1 / distance);
 
-    this.luring = !!this.keys.KeyF && this.treats > 0;
+    // Mechs only respond to scrap cores; organic creatures want treats
+    const baitSupply = planet.type.baitKind === 'scrap' ? this.scrap : this.treats;
+    this.luring = !!this.keys.KeyF && baitSupply > 0;
     const boosting = !!(this.keys.ShiftLeft || this.keys.ShiftRight);
     const forwardTangent = cameraForward.clone().addScaledVector(this.up, -cameraForward.dot(this.up));
     if (forwardTangent.lengthSq() < 1e-6) forwardTangent.set(1, 0, 0);
@@ -273,7 +276,7 @@ export class Player {
       let burnRate = 0;
       if (this.keys.Space && this.fuel > 0) {
         this.jetting = true;
-        this.velocity.addScaledVector(this.up, JET_UP_ACCEL * thrustMultiplier * dt);
+        this.velocity.addScaledVector(this.up, JET_UP_ACCEL * (this.perks.jetMult || 1) * thrustMultiplier * dt);
         burnRate += FUEL_BURN * (boosting ? BOOST_BURN_MULTIPLIER : 1);
       }
       if ((moveX !== 0 || moveZ !== 0) && this.fuel > 0) {

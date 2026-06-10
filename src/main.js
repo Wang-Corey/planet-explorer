@@ -7,6 +7,7 @@ import { Hud } from './ui/hud.js';
 import { randomSeed } from './core/rng.js';
 import { initAudio, playChime, playWarp, playScan, playTreat, playTame } from './core/audio.js';
 import { PetManager } from './pets/pets.js';
+import { Creature } from './planets/creatures.js';
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -37,9 +38,52 @@ petManager.summon(player);
 function syncPetHud() {
   hud.setActivePet(petManager.activePet, petManager.perksForActive().label);
   hud.setPetCollection(petManager.pets, petManager.activeIndex);
-  hud.setTreats(player.treats);
+  hud.setTreats(player.treats, player.scrap);
 }
+
+function populateSanctuary() {
+  const haven = system.sanctuaryPlanet;
+  for (const record of petManager.sanctuary) {
+    haven.creatures.push(new Creature(haven, record.seed, {
+      typeId: record.typeId,
+      scale: record.scale,
+      tame: true,
+    }));
+  }
+}
+
+populateSanctuary();
 syncPetHud();
+
+hud.onSummonPet = (index) => {
+  petManager.setActive(index, player);
+  syncPetHud();
+};
+
+hud.onReleasePet = (index) => {
+  const record = petManager.release(index, player);
+  if (!record) return;
+  const haven = system.sanctuaryPlanet;
+  haven.creatures.push(new Creature(haven, record.seed, {
+    typeId: record.typeId,
+    scale: record.scale,
+    tame: true,
+  }));
+  hud.showToast('Released to Haven:', record.species);
+  syncPetHud();
+};
+
+petManager.onDig = () => {
+  const planet = player.planet;
+  if (!planet) return;
+  const isScrap = planet.type.baitKind === 'scrap';
+  const amount = Math.random() < 0.35 ? 2 : 1;
+  if (isScrap) player.scrap += amount;
+  else player.treats += amount;
+  playTreat();
+  hud.showToast('Your pet dug up', `${amount} ${isScrap ? 'scrap' : 'treat'}${amount > 1 ? 's' : ''}`);
+  hud.setTreats(player.treats, player.scrap);
+};
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -63,6 +107,7 @@ startOverlay.addEventListener('click', () => {
   lockPointer();
 });
 renderer.domElement.addEventListener('click', () => {
+  if (hud.isLogOpen()) hud.toggleLog();
   if (document.pointerLockElement !== renderer.domElement) lockPointer();
 });
 
@@ -72,6 +117,7 @@ function regenerateSystem() {
   totalCollected = 0;
   bannerPlanet = null;
   hud.reset();
+  populateSanctuary();
   player.spawnOn(system.planets[0]);
   playWarp();
 }
@@ -79,7 +125,9 @@ function regenerateSystem() {
 window.addEventListener('keydown', (event) => {
   if (event.code === 'Tab') {
     event.preventDefault();
-    hud.toggleLog();
+    // Free the mouse while the log is open so pets can be clicked
+    if (hud.toggleLog()) document.exitPointerLock();
+    else lockPointer();
   } else if (event.code === 'KeyN') {
     regenerateSystem();
   } else if (event.code === 'KeyP') {
@@ -130,15 +178,19 @@ function updatePlanetPresence() {
       hud.addDiscovery(planet, `${scannedSpecies} (creature)`);
     }
     if (planet.tryPickupBait(player.position, 2.2 * (player.perks.reachMult || 1))) {
-      player.treats++;
+      if (planet.type.baitKind === 'scrap') player.scrap++;
+      else player.treats++;
       playTreat();
-      hud.setTreats(player.treats);
+      hud.setTreats(player.treats, player.scrap);
     }
     if (player.luring) {
       const tamed = planet.tryTame(player.position);
       if (tamed) {
         const treatSaved = player.perks.treatSaver && Math.random() < 0.5;
-        if (!treatSaved) player.treats--;
+        if (!treatSaved) {
+          if (planet.type.baitKind === 'scrap') player.scrap--;
+          else player.treats--;
+        }
         petManager.tame(tamed, player);
         playTame();
         hud.showToast('Tamed', tamed.species);
@@ -159,7 +211,7 @@ function updateLiquidTint() {
   hud.setLiquidTint(submerged ? planet.type.liquid.color : null);
 }
 
-window.__game = { player, petManager, get system() { return system; } };
+window.__game = { player, petManager, hud, get system() { return system; } };
 
 const clock = new THREE.Clock();
 let elapsed = 0;

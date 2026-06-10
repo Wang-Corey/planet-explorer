@@ -16,12 +16,14 @@ export const PET_PERKS = {
   candy: { label: 'Treats are only eaten half the time', treatSaver: true },
   crystal: { label: 'Wider pickup reach', reachMult: 1.6 },
   glitch: { label: '+25% boost top speed', boostCapMult: 1.25 },
+  mech: { label: '+20% jetpack thrust', jetMult: 1.2 },
 };
 
 class Companion {
   constructor(scene, record) {
     this.scene = scene;
     const { root } = buildCreatureVisual(record.typeId, record.seed);
+    root.scale.setScalar(record.scale || 1);
     this.root = root;
     this.meta = root.userData;
     this.bodyHeight = this.meta.bodyHeight * root.scale.x;
@@ -86,9 +88,16 @@ export class PetManager {
   constructor(scene) {
     this.scene = scene;
     this.companion = null;
+    this.digTimer = this.nextDigDelay();
+    this.onDig = null;
     const saved = this.load();
     this.pets = saved.pets;
     this.activeIndex = saved.activeIndex;
+    this.sanctuary = saved.sanctuary;
+  }
+
+  nextDigDelay() {
+    return 40 + Math.random() * 35;
   }
 
   load() {
@@ -97,17 +106,25 @@ export class PetManager {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed.pets)) {
-          return { pets: parsed.pets, activeIndex: parsed.activeIndex ?? -1 };
+          return {
+            pets: parsed.pets,
+            activeIndex: parsed.activeIndex ?? -1,
+            sanctuary: Array.isArray(parsed.sanctuary) ? parsed.sanctuary : [],
+          };
         }
       }
     } catch {
       // Corrupt save: start fresh
     }
-    return { pets: [], activeIndex: -1 };
+    return { pets: [], activeIndex: -1, sanctuary: [] };
   }
 
   save() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ pets: this.pets, activeIndex: this.activeIndex }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      pets: this.pets,
+      activeIndex: this.activeIndex,
+      sanctuary: this.sanctuary,
+    }));
   }
 
   get activePet() {
@@ -116,7 +133,15 @@ export class PetManager {
 
   perksForActive() {
     const pet = this.activePet;
-    return pet ? (PET_PERKS[pet.typeId] || {}) : {};
+    if (!pet) return {};
+    const base = PET_PERKS[pet.typeId] || {};
+    if (!pet.radiant) return base;
+    // Radiant pets double their perk's deviation from neutral
+    const boosted = { ...base, label: `${base.label} ×2 (radiant)` };
+    for (const [key, value] of Object.entries(base)) {
+      if (key.endsWith('Mult')) boosted[key] = 1 + (value - 1) * 2;
+    }
+    return boosted;
   }
 
   tame(record, player) {
@@ -124,6 +149,25 @@ export class PetManager {
     if (this.activeIndex < 0) this.activeIndex = this.pets.length - 1;
     this.save();
     this.summon(player);
+  }
+
+  setActive(index, player) {
+    if (index < -1 || index >= this.pets.length) return;
+    this.activeIndex = index;
+    this.save();
+    this.summon(player);
+  }
+
+  // Move a pet from the collection to the sanctuary; returns its record.
+  release(index, player) {
+    if (index < 0 || index >= this.pets.length) return null;
+    const [record] = this.pets.splice(index, 1);
+    this.sanctuary.push(record);
+    if (this.activeIndex === index) this.activeIndex = -1;
+    else if (this.activeIndex > index) this.activeIndex--;
+    this.save();
+    this.summon(player);
+    return record;
   }
 
   // Cycle active pet: each press moves to the next, then to "no pet", then wraps.
@@ -148,6 +192,16 @@ export class PetManager {
   }
 
   update(dt, elapsed, player) {
-    if (this.companion) this.companion.update(dt, elapsed, player);
+    if (!this.companion) return;
+    this.companion.update(dt, elapsed, player);
+
+    // Active pets occasionally dig up buried bait while you explore on foot
+    if (player.grounded) {
+      this.digTimer -= dt;
+      if (this.digTimer <= 0) {
+        this.digTimer = this.nextDigDelay();
+        if (this.onDig) this.onDig();
+      }
+    }
   }
 }

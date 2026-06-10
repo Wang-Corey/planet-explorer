@@ -60,6 +60,7 @@ const COLLECTIBLE_SHAPES = {
   gem: () => new THREE.OctahedronGeometry(0.45, 0).scale(1, 1.5, 1),
   seed: () => new THREE.ConeGeometry(0.35, 0.9, 6),
   cube: () => new THREE.BoxGeometry(0.6, 0.6, 0.6),
+  gear: () => new THREE.TorusGeometry(0.42, 0.16, 6, 9),
 };
 
 function shapeElevation(shape, raw, noise3D, direction, frequency) {
@@ -111,7 +112,7 @@ export class Planet {
     this.visited = false;
 
     this.rng = createRng(options.seed);
-    this.name = generatePlanetName(this.rng, options.orbitIndex);
+    this.name = options.name || generatePlanetName(this.rng, options.orbitIndex);
     this.noise3D = createNoise3D(this.rng.next);
     this.noiseOffset = new THREE.Vector3(this.rng.range(-50, 50), this.rng.range(-50, 50), this.rng.range(-50, 50));
 
@@ -123,8 +124,7 @@ export class Planet {
     this.collectibles = [];
     this.collectedCount = 0;
     this.creatures = [];
-    this.speciesName = null;
-    this.speciesScanned = false;
+    this.species = [];
     this.baits = [];
 
     this.buildTerrain();
@@ -335,6 +335,7 @@ export class Planet {
 
   buildCollectibles() {
     const discovery = this.type.discovery;
+    if (!discovery) return;
     const buildShape = COLLECTIBLE_SHAPES[discovery.shape] || COLLECTIBLE_SHAPES.gem;
     const material = new THREE.MeshStandardMaterial({
       color: discovery.color,
@@ -377,26 +378,45 @@ export class Planet {
   buildCreatures() {
     const config = this.type.creature;
     if (!config) return;
-    this.speciesName = `${this.rng.pick(config.prefixes)} ${this.rng.pick(config.suffixes)}`;
-    const count = this.rng.int(config.count[0], config.count[1]);
-    for (let i = 0; i < count; i++) {
-      this.creatures.push(new Creature(this, this.rng.int(0, 0xfffffff)));
+    const speciesCount = this.rng.int(2, 3);
+    const usedNames = new Set();
+    for (let s = 0; s < speciesCount; s++) {
+      const seed = this.rng.int(0, 0xfffffff);
+      let name = `${this.rng.pick(config.prefixes)} ${this.rng.pick(config.suffixes)}`;
+      for (let retry = 0; usedNames.has(name) && retry < 8; retry++) {
+        name = `${this.rng.pick(config.prefixes)} ${this.rng.pick(config.suffixes)}`;
+      }
+      usedNames.add(name);
+
+      const individuals = this.rng.int(2, 3);
+      let radiant = false;
+      for (let i = 0; i < individuals; i++) {
+        const creature = new Creature(this, seed, { speciesIndex: s });
+        radiant = creature.meta.radiant;
+        this.creatures.push(creature);
+      }
+      this.species.push({ seed, name: radiant ? `Radiant ${name}` : name, scanned: false, radiant });
     }
   }
 
   buildBait() {
+    if (!this.type.discovery) return;
     const color = this.type.discovery.color;
     const material = new THREE.MeshStandardMaterial({
       color,
       emissive: color,
       emissiveIntensity: 0.9,
       roughness: 0.4,
+      metalness: this.type.baitKind === 'scrap' ? 0.6 : 0,
     });
     const minElevation = this.type.liquid && this.type.liquidClass !== 'solid' ? this.type.liquid.level + 0.02 : 0;
     for (let i = 0; i < 10; i++) {
       const spot = this.randomSurfacePoint(minElevation, 1);
       if (!spot) continue;
-      const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 6), material);
+      const geometry = this.type.baitKind === 'scrap'
+        ? new THREE.TorusGeometry(0.22, 0.09, 5, 7)
+        : new THREE.SphereGeometry(0.28, 8, 6);
+      const mesh = new THREE.Mesh(geometry, material);
       mesh.scale.y = 0.75;
       const baseRadius = this.groundRadiusLocal(spot.direction) + 0.5;
       mesh.position.copy(spot.direction).multiplyScalar(baseRadius);
@@ -495,13 +515,14 @@ export class Planet {
   }
 
   tryScan(playerWorldPosition, reach = 5) {
-    if (this.speciesScanned || this.creatures.length === 0) return null;
     const worldPosition = new THREE.Vector3();
     for (const creature of this.creatures) {
+      const species = this.species[creature.speciesIndex];
+      if (!species || species.scanned) continue;
       creature.root.getWorldPosition(worldPosition);
       if (worldPosition.distanceToSquared(playerWorldPosition) < reach * reach) {
-        this.speciesScanned = true;
-        return this.speciesName;
+        species.scanned = true;
+        return species.name;
       }
     }
     return null;
@@ -523,9 +544,12 @@ export class Planet {
   }
 
   tryTame(playerWorldPosition, reach = 2.8) {
+    if (!this.type.creature) return null;
     const worldPosition = new THREE.Vector3();
     for (let i = 0; i < this.creatures.length; i++) {
       const creature = this.creatures[i];
+      const species = this.species[creature.speciesIndex];
+      if (!species) continue;
       creature.root.getWorldPosition(worldPosition);
       if (worldPosition.distanceToSquared(playerWorldPosition) < reach * reach) {
         this.creatures.splice(i, 1);
@@ -534,7 +558,14 @@ export class Planet {
           if (object.geometry) object.geometry.dispose();
           if (object.material) object.material.dispose();
         });
-        return { seed: creature.seed, typeId: this.type.id, species: this.speciesName, origin: this.name };
+        return {
+          seed: creature.seed,
+          typeId: this.type.id,
+          species: species.name,
+          origin: this.name,
+          scale: creature.scale,
+          radiant: species.radiant,
+        };
       }
     }
     return null;
@@ -563,11 +594,11 @@ export class Planet {
   }
 
   totalDiscoveryCount() {
-    return this.collectibles.length + (this.creatures.length > 0 ? 1 : 0);
+    return this.collectibles.length + this.species.length;
   }
 
   discoveredCount() {
-    return this.collectedCount + (this.speciesScanned ? 1 : 0);
+    return this.collectedCount + this.species.filter((s) => s.scanned).length;
   }
 
   dispose() {

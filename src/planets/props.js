@@ -301,6 +301,56 @@ const builders = {
     return merge([place(drop, 0, 0.05, 0)]);
   },
 
+  antenna(rng) {
+    const metal = vary(rng, '#6a7280', 0.04);
+    const height = rng.range(2.5, 4.5);
+    const parts = [
+      place(paint(new THREE.CylinderGeometry(0.06, 0.14, height, 5), metal), 0, height / 2, 0),
+      place(paint(new THREE.SphereGeometry(0.16, 6, 5), rng.pick(['#16f0c8', '#ffd24f', '#ff5a3a'])), 0, height + 0.1, 0),
+    ];
+    const crossbars = rng.int(1, 3);
+    for (let i = 0; i < crossbars; i++) {
+      parts.push(place(paint(new THREE.BoxGeometry(rng.range(0.6, 1.2), 0.06, 0.06), metal), 0, height * rng.range(0.5, 0.9), 0, 0, rng.range(0, 3), 0));
+    }
+    return merge(parts);
+  },
+
+  pipes(rng) {
+    const metal = vary(rng, rng.pick(['#5a6068', '#7a6a52', '#4a5058']), 0.04);
+    const parts = [];
+    let x = rng.range(-0.4, 0.4);
+    const segments = rng.int(2, 4);
+    for (let i = 0; i < segments; i++) {
+      const length = rng.range(0.8, 1.6);
+      const vertical = i % 2 === 0;
+      parts.push(place(
+        paint(new THREE.CylinderGeometry(0.14, 0.14, length, 6), metal),
+        x, vertical ? length / 2 : 0.9, i * 0.3 - 0.3,
+        vertical ? 0 : Math.PI / 2, 0, 0
+      ));
+      if (!vertical) x += length * 0.4;
+    }
+    parts.push(place(paint(new THREE.TorusGeometry(0.2, 0.05, 5, 8), '#ffd24f'), x * 0.5, 1.1, 0, Math.PI / 2, 0, 0));
+    return merge(parts);
+  },
+
+  machineBlock(rng) {
+    const parts = [];
+    const stacks = rng.int(1, 3);
+    let y = 0;
+    for (let i = 0; i < stacks; i++) {
+      const width = rng.range(0.7, 1.5) * (1 - i * 0.2);
+      const blockHeight = rng.range(0.4, 0.9);
+      parts.push(place(paint(new THREE.BoxGeometry(width, blockHeight, width * rng.range(0.7, 1.2)), vary(rng, '#3a3e46', 0.05)), 0, y + blockHeight / 2, 0, 0, rng.range(0, 1.5), 0));
+      y += blockHeight;
+    }
+    parts.push(place(paint(new THREE.CylinderGeometry(0.08, 0.08, 0.5, 5), '#6a7280'), rng.range(-0.3, 0.3), y + 0.2, rng.range(-0.3, 0.3)));
+    if (rng.chance(0.6)) {
+      parts.push(place(paint(new THREE.BoxGeometry(0.2, 0.2, 0.05), rng.pick(['#16f0c8', '#ff5a3a'])), 0, y * 0.5, 0.55));
+    }
+    return merge(parts);
+  },
+
   glitchCube(rng) {
     const color = rng.pick(['#ff2bd6', '#2bffd6', '#2b6aff']);
     const parts = [];
@@ -315,7 +365,7 @@ const builders = {
   },
 };
 
-const GLOWING_BUILDERS = new Set(['glowFlower', 'smallMushroom', 'crystal', 'glitchCube', 'tentacle', 'coral']);
+const GLOWING_BUILDERS = new Set(['glowFlower', 'smallMushroom', 'crystal', 'glitchCube', 'tentacle', 'coral', 'antenna']);
 
 export function buildPropGeometry(builderName, rng, config) {
   return builders[builderName](rng, config);
