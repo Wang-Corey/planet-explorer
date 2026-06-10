@@ -1,0 +1,322 @@
+// Each planet type defines terrain shape, elevation color bands, optional
+// liquid layer, scattered props, ambient particles, and themed discoveries.
+// Elevation values are normalized to [0, 1]; colorStops pick the band whose
+// `t` is the highest one at or below the face's elevation.
+
+export const PLANET_TYPES = [
+  {
+    id: 'desert',
+    label: 'Desert World',
+    shape: 'dunes',
+    noiseFrequency: 1.6,
+    amplitude: 0.09,
+    colorStops: [
+      [0.0, '#e8b06a'],
+      [0.35, '#d99a52'],
+      [0.6, '#c27e3c'],
+      [0.82, '#8f5a2e'],
+    ],
+    liquid: null,
+    atmosphere: '#e8a85f',
+    particles: { color: '#e8c890', count: 90, size: 0.5, height: 4 },
+    props: [
+      { builder: 'cactus', count: 60, minE: 0.2, maxE: 0.75 },
+      { builder: 'rock', count: 45, minE: 0.0, maxE: 1.0, tint: '#a8784a' },
+      { builder: 'dryShrub', count: 40, minE: 0.15, maxE: 0.7 },
+    ],
+    discovery: {
+      color: '#ffce54',
+      shape: 'shard',
+      prefixes: ['Sun', 'Dune', 'Mirage', 'Ember', 'Scorch', 'Amber'],
+      suffixes: ['Shard', 'Rose', 'Relic', 'Fossil', 'Idol', 'Geode'],
+    },
+  },
+  {
+    id: 'ocean',
+    label: 'Ocean World',
+    shape: 'smooth',
+    noiseFrequency: 1.4,
+    amplitude: 0.12,
+    colorStops: [
+      [0.0, '#2b6a8f'],
+      [0.45, '#5a93a8'],
+      [0.54, '#e8d9a0'],
+      [0.62, '#7fc26a'],
+      [0.8, '#4a8f4f'],
+      [0.92, '#8a9a8f'],
+    ],
+    liquid: { level: 0.54, color: '#1d7fd6', opacity: 0.78, emissive: '#0a3a6a', emissiveIntensity: 0.25 },
+    atmosphere: '#7fc8ff',
+    particles: null,
+    props: [
+      { builder: 'palm', count: 36, minE: 0.57, maxE: 0.78 },
+      { builder: 'coral', count: 40, minE: 0.3, maxE: 0.5 },
+      { builder: 'rock', count: 25, minE: 0.6, maxE: 1.0, tint: '#9aa8a0' },
+    ],
+    discovery: {
+      color: '#aef4ff',
+      shape: 'pearl',
+      prefixes: ['Tide', 'Pearl', 'Abyss', 'Coral', 'Brine', 'Foam'],
+      suffixes: ['Heart', 'Shell', 'Drop', 'Bloom', 'Charm', 'Echo'],
+    },
+  },
+  {
+    id: 'toxic',
+    label: 'Toxic World',
+    shape: 'smooth',
+    noiseFrequency: 1.8,
+    amplitude: 0.1,
+    colorStops: [
+      [0.0, '#3a4a1d'],
+      [0.46, '#55652a'],
+      [0.68, '#6b5a7d'],
+      [0.88, '#4a3a5d'],
+    ],
+    liquid: { level: 0.46, color: '#9ef01a', opacity: 0.85, emissive: '#6abf0f', emissiveIntensity: 0.7 },
+    atmosphere: '#a8f01a',
+    particles: { color: '#c6ff4f', count: 140, size: 0.45, height: 6 },
+    props: [
+      { builder: 'vent', count: 30, minE: 0.5, maxE: 0.9 },
+      { builder: 'tentacle', count: 40, minE: 0.48, maxE: 0.85 },
+      { builder: 'spikeRock', count: 35, minE: 0.5, maxE: 1.0, tint: '#5d4a6b' },
+    ],
+    discovery: {
+      color: '#c6ff4f',
+      shape: 'orb',
+      prefixes: ['Venom', 'Spore', 'Blight', 'Miasma', 'Sludge', 'Plague'],
+      suffixes: ['Bloom', 'Sac', 'Core', 'Pod', 'Cyst', 'Gland'],
+    },
+  },
+  {
+    id: 'fairy',
+    label: 'Fairy World',
+    shape: 'gentle',
+    noiseFrequency: 1.5,
+    amplitude: 0.07,
+    colorStops: [
+      [0.0, '#7fb88f'],
+      [0.5, '#9ad5a0'],
+      [0.68, '#c9a0e8'],
+      [0.86, '#f3d7f7'],
+    ],
+    liquid: { level: 0.48, color: '#ff9ad5', opacity: 0.7, emissive: '#d65aa0', emissiveIntensity: 0.4 },
+    atmosphere: '#f0a6ff',
+    particles: { color: '#ffd6fa', count: 220, size: 0.55, height: 7 },
+    props: [
+      { builder: 'fairyTree', count: 45, minE: 0.5, maxE: 0.85 },
+      { builder: 'glowFlower', count: 70, minE: 0.5, maxE: 0.9 },
+      { builder: 'smallMushroom', count: 45, minE: 0.5, maxE: 0.8, glow: '#ff9ad5' },
+    ],
+    discovery: {
+      color: '#ffb8f0',
+      shape: 'star',
+      prefixes: ['Wisp', 'Dream', 'Glimmer', 'Pixie', 'Moon', 'Dawn'],
+      suffixes: ['Petal', 'Lantern', 'Tear', 'Bell', 'Crown', 'Feather'],
+    },
+  },
+  {
+    id: 'ice',
+    label: 'Frozen World',
+    shape: 'ridged',
+    noiseFrequency: 1.7,
+    amplitude: 0.14,
+    colorStops: [
+      [0.0, '#7fb6d9'],
+      [0.42, '#b8e0f0'],
+      [0.6, '#dff3fb'],
+      [0.85, '#ffffff'],
+    ],
+    liquid: { level: 0.42, color: '#9fd8ef', opacity: 0.9, emissive: '#3a6a8f', emissiveIntensity: 0.15 },
+    atmosphere: '#bfe9ff',
+    particles: { color: '#ffffff', count: 260, size: 0.4, height: 8 },
+    props: [
+      { builder: 'iceSpike', count: 50, minE: 0.45, maxE: 1.0 },
+      { builder: 'snowPine', count: 40, minE: 0.44, maxE: 0.75 },
+      { builder: 'crystal', count: 25, minE: 0.5, maxE: 0.95, tint: '#bfe9ff' },
+    ],
+    discovery: {
+      color: '#bfe9ff',
+      shape: 'gem',
+      prefixes: ['Frost', 'Glacier', 'Aurora', 'Rime', 'Polar', 'Hail'],
+      suffixes: ['Core', 'Prism', 'Sliver', 'Bloom', 'Tear', 'Lens'],
+    },
+  },
+  {
+    id: 'lava',
+    label: 'Volcanic World',
+    shape: 'ridged',
+    noiseFrequency: 1.8,
+    amplitude: 0.13,
+    colorStops: [
+      [0.0, '#574343'],
+      [0.4, '#3a2f2f'],
+      [0.7, '#2b2222'],
+      [0.9, '#1c1616'],
+    ],
+    liquid: { level: 0.4, color: '#ff5a1f', opacity: 1.0, emissive: '#ff6a00', emissiveIntensity: 1.6 },
+    atmosphere: '#ff7a3f',
+    particles: { color: '#ffae4f', count: 160, size: 0.5, height: 7 },
+    props: [
+      { builder: 'obsidian', count: 50, minE: 0.45, maxE: 1.0 },
+      { builder: 'vent', count: 25, minE: 0.5, maxE: 0.9 },
+      { builder: 'spikeRock', count: 30, minE: 0.45, maxE: 0.95, tint: '#2b2020' },
+    ],
+    discovery: {
+      color: '#ffae4f',
+      shape: 'shard',
+      prefixes: ['Ember', 'Magma', 'Cinder', 'Ash', 'Pyre', 'Forge'],
+      suffixes: ['Heart', 'Tear', 'Ingot', 'Coal', 'Spark', 'Vein'],
+    },
+  },
+  {
+    id: 'forest',
+    label: 'Forest World',
+    shape: 'smooth',
+    noiseFrequency: 1.5,
+    amplitude: 0.1,
+    colorStops: [
+      [0.0, '#3a6a5d'],
+      [0.45, '#d9c98f'],
+      [0.5, '#6aa84f'],
+      [0.72, '#4a8a3a'],
+      [0.9, '#8a8f80'],
+    ],
+    liquid: { level: 0.45, color: '#2a8fcf', opacity: 0.8, emissive: '#0a3a5a', emissiveIntensity: 0.2 },
+    atmosphere: '#9fd8a0',
+    particles: { color: '#ffe97f', count: 90, size: 0.4, height: 5 },
+    props: [
+      { builder: 'leafyTree', count: 75, minE: 0.5, maxE: 0.85 },
+      { builder: 'fern', count: 55, minE: 0.48, maxE: 0.8 },
+      { builder: 'rock', count: 30, minE: 0.5, maxE: 1.0, tint: '#8a8f80' },
+    ],
+    discovery: {
+      color: '#b8ff8f',
+      shape: 'seed',
+      prefixes: ['Elder', 'Verdant', 'Root', 'Canopy', 'Moss', 'Grove'],
+      suffixes: ['Seed', 'Acorn', 'Bud', 'Sprout', 'Amber', 'Ring'],
+    },
+  },
+  {
+    id: 'mushroom',
+    label: 'Fungal World',
+    shape: 'gentle',
+    noiseFrequency: 1.3,
+    amplitude: 0.09,
+    colorStops: [
+      [0.0, '#5a4f6b'],
+      [0.42, '#7a6f8f'],
+      [0.65, '#9a8aa8'],
+      [0.85, '#b8a8c2'],
+    ],
+    liquid: { level: 0.42, color: '#7f5ad6', opacity: 0.75, emissive: '#5a3aa8', emissiveIntensity: 0.5 },
+    atmosphere: '#c08fff',
+    particles: { color: '#d6a0ff', count: 200, size: 0.5, height: 8 },
+    props: [
+      { builder: 'giantMushroom', count: 35, minE: 0.46, maxE: 0.8 },
+      { builder: 'smallMushroom', count: 80, minE: 0.44, maxE: 0.85, glow: '#d6a0ff' },
+      { builder: 'fern', count: 30, minE: 0.45, maxE: 0.7 },
+    ],
+    discovery: {
+      color: '#d6a0ff',
+      shape: 'orb',
+      prefixes: ['Spore', 'Myco', 'Velvet', 'Gloom', 'Cap', 'Fae'],
+      suffixes: ['Pod', 'Truffle', 'Gill', 'Puff', 'Cluster', 'Lumen'],
+    },
+  },
+  {
+    id: 'candy',
+    label: 'Candy World',
+    shape: 'gentle',
+    noiseFrequency: 1.4,
+    amplitude: 0.08,
+    colorStops: [
+      [0.0, '#ffb8d8'],
+      [0.47, '#ffd6e8'],
+      [0.68, '#ffeef7'],
+      [0.86, '#d6f7ff'],
+    ],
+    liquid: { level: 0.47, color: '#ff8fc0', opacity: 0.75, emissive: '#d65a90', emissiveIntensity: 0.35 },
+    atmosphere: '#ffb0d8',
+    particles: { color: '#fff0a0', count: 130, size: 0.45, height: 6 },
+    props: [
+      { builder: 'candyCane', count: 40, minE: 0.5, maxE: 0.85 },
+      { builder: 'lollipop', count: 35, minE: 0.5, maxE: 0.85 },
+      { builder: 'gumdrop', count: 60, minE: 0.48, maxE: 0.9 },
+    ],
+    discovery: {
+      color: '#ff8fc0',
+      shape: 'gem',
+      prefixes: ['Sugar', 'Taffy', 'Fizz', 'Cocoa', 'Sherbet', 'Jelly'],
+      suffixes: ['Gem', 'Drop', 'Swirl', 'Cube', 'Button', 'Truffle'],
+    },
+  },
+  {
+    id: 'crystal',
+    label: 'Crystal World',
+    shape: 'terraced',
+    noiseFrequency: 1.6,
+    amplitude: 0.12,
+    colorStops: [
+      [0.0, '#2b2044'],
+      [0.35, '#3f2d5d'],
+      [0.6, '#55407d'],
+      [0.85, '#7a5aa8'],
+    ],
+    liquid: null,
+    atmosphere: '#7fdfff',
+    particles: { color: '#9fe8ff', count: 180, size: 0.5, height: 9 },
+    props: [
+      { builder: 'crystal', count: 70, minE: 0.1, maxE: 1.0, tint: '#7fdfff' },
+      { builder: 'crystal', count: 40, minE: 0.3, maxE: 1.0, tint: '#ff7fd6' },
+      { builder: 'spikeRock', count: 30, minE: 0.0, maxE: 0.9, tint: '#443060' },
+    ],
+    discovery: {
+      color: '#9fe8ff',
+      shape: 'gem',
+      prefixes: ['Prism', 'Facet', 'Chroma', 'Lattice', 'Quartz', 'Echo'],
+      suffixes: ['Cluster', 'Spire', 'Node', 'Lens', 'Matrix', 'Chime'],
+    },
+  },
+  {
+    id: 'glitch',
+    label: 'Corrupted World',
+    shape: 'glitch',
+    noiseFrequency: 2.0,
+    amplitude: 0.11,
+    colorStops: [
+      [0.0, '#0a0a16'],
+      [0.3, '#1a1a2e'],
+      [0.5, '#ff2bd6'],
+      [0.62, '#1a1a2e'],
+      [0.78, '#2bffd6'],
+      [0.9, '#16162a'],
+    ],
+    liquid: { level: 0.3, color: '#05050d', opacity: 0.95, emissive: '#1a0a2e', emissiveIntensity: 0.4 },
+    atmosphere: '#ff2bd6',
+    particles: { color: '#2bffd6', count: 150, size: 0.55, height: 10 },
+    props: [
+      { builder: 'glitchCube', count: 60, minE: 0.3, maxE: 1.0 },
+      { builder: 'spikeRock', count: 25, minE: 0.3, maxE: 1.0, tint: '#1a1a3e' },
+    ],
+    discovery: {
+      color: '#2bffd6',
+      shape: 'cube',
+      prefixes: ['Null', 'Hex', 'Static', 'Phantom', 'Broken', 'Cipher'],
+      suffixes: ['Fragment', 'Byte', 'Anomaly', 'Artifact', 'Segment', 'Key'],
+    },
+  },
+];
+
+const NAME_START = ['Zar', 'Veo', 'Quil', 'Ash', 'Bryn', 'Cor', 'Del', 'Eri', 'Fen', 'Gal', 'Hra', 'Ix', 'Jun', 'Kel', 'Lum', 'Mor', 'Nyx', 'Oph', 'Pra', 'Ryn', 'Sol', 'Tev', 'Ul', 'Vex', 'Wyn', 'Xan', 'Yor', 'Zen'];
+const NAME_MID = ['a', 'e', 'i', 'o', 'u', 'ae', 'ia', 'eo', 'ou', 'y'];
+const NAME_END = ['ron', 'dia', 'lis', 'mar', 'nox', 'pha', 'rix', 'tis', 'vor', 'wen', 'xis', 'zul', 'gard', 'heim', 'thos'];
+const NUMERALS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+
+export function generatePlanetName(rng, orbitIndex) {
+  const name = rng.pick(NAME_START) + rng.pick(NAME_MID) + rng.pick(NAME_END);
+  return `${name} ${NUMERALS[Math.min(orbitIndex, NUMERALS.length - 1)]}`;
+}
+
+export function generateDiscoveryName(rng, discovery) {
+  return `${rng.pick(discovery.prefixes)} ${rng.pick(discovery.suffixes)}`;
+}

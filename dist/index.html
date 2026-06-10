@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Planet Explorer</title>
+  <style>
+    :root {
+      --hud-bg: rgba(10, 14, 28, 0.55);
+      --hud-border: rgba(140, 180, 255, 0.25);
+      --accent: #8fd0ff;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #05060f; }
+    body {
+      font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+      color: #e8f1ff;
+      user-select: none;
+    }
+    canvas { display: block; }
+
+    #hud { position: fixed; inset: 0; pointer-events: none; }
+
+    .panel {
+      background: var(--hud-bg);
+      border: 1px solid var(--hud-border);
+      border-radius: 10px;
+      backdrop-filter: blur(6px);
+      padding: 10px 16px;
+    }
+
+    #planet-info {
+      position: absolute; top: 18px; left: 18px;
+      display: flex; flex-direction: column; gap: 2px;
+      min-width: 200px;
+    }
+    #planet-name { font-size: 18px; font-weight: 600; letter-spacing: 0.04em; }
+    #planet-type { font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.85; }
+
+    #discoveries {
+      position: absolute; top: 18px; right: 18px;
+      text-align: right; font-size: 14px; line-height: 1.6;
+    }
+    #discoveries b { color: var(--accent); font-size: 17px; }
+
+    #controls-hint {
+      position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+      font-size: 12.5px; letter-spacing: 0.05em; opacity: 0.85;
+      white-space: nowrap; transition: opacity 1.2s ease;
+    }
+    #controls-hint.faded { opacity: 0.25; }
+    #controls-hint span { color: var(--accent); font-weight: 600; }
+
+    #banner {
+      position: absolute; top: 22%; left: 50%; transform: translateX(-50%);
+      text-align: center; opacity: 0; transition: opacity 0.6s ease;
+      text-shadow: 0 0 24px rgba(120, 180, 255, 0.6);
+      pointer-events: none;
+    }
+    #banner.show { opacity: 1; }
+    #banner .b-pre { font-size: 13px; letter-spacing: 0.5em; text-transform: uppercase; opacity: 0.8; }
+    #banner .b-name { font-size: 44px; font-weight: 700; letter-spacing: 0.08em; margin-top: 4px; }
+    #banner .b-type { font-size: 15px; letter-spacing: 0.3em; text-transform: uppercase; margin-top: 6px; }
+
+    #toasts {
+      position: absolute; bottom: 70px; left: 50%; transform: translateX(-50%);
+      display: flex; flex-direction: column-reverse; align-items: center; gap: 6px;
+    }
+    .toast {
+      background: var(--hud-bg); border: 1px solid var(--hud-border);
+      border-radius: 999px; padding: 7px 18px; font-size: 14px;
+      animation: toast-in 0.35s ease, toast-out 0.6s ease 2.6s forwards;
+    }
+    .toast b { color: #ffe28f; }
+    @keyframes toast-in { from { opacity: 0; transform: translateY(14px); } }
+    @keyframes toast-out { to { opacity: 0; transform: translateY(-10px); } }
+
+    #log-panel {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: min(520px, 86vw); max-height: 70vh; overflow-y: auto;
+      display: none; padding: 18px 22px;
+    }
+    #log-panel.open { display: block; }
+    #log-panel h2 { font-size: 16px; letter-spacing: 0.25em; text-transform: uppercase; margin-bottom: 12px; color: var(--accent); }
+    #log-panel .log-planet { margin-bottom: 14px; }
+    #log-panel .log-planet h3 { font-size: 15px; margin-bottom: 4px; }
+    #log-panel .log-planet h3 small { font-weight: 400; opacity: 0.7; letter-spacing: 0.12em; text-transform: uppercase; font-size: 11px; margin-left: 8px; }
+    #log-panel ul { list-style: none; }
+    #log-panel li { font-size: 13.5px; padding: 2px 0 2px 14px; position: relative; opacity: 0.92; }
+    #log-panel li::before { content: "✦"; position: absolute; left: 0; color: #ffe28f; font-size: 11px; }
+    #log-panel .log-empty { font-size: 13.5px; opacity: 0.7; }
+
+    #start-overlay {
+      position: fixed; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 18px;
+      background: radial-gradient(ellipse at center, rgba(20, 28, 60, 0.55), rgba(4, 5, 14, 0.92));
+      cursor: pointer; pointer-events: auto; transition: opacity 0.5s ease;
+      text-align: center;
+    }
+    #start-overlay.hidden { opacity: 0; pointer-events: none; }
+    #start-overlay h1 { font-size: 52px; letter-spacing: 0.22em; font-weight: 700; text-shadow: 0 0 32px rgba(130, 190, 255, 0.7); }
+    #start-overlay p { font-size: 14px; line-height: 2; opacity: 0.85; letter-spacing: 0.04em; }
+    #start-overlay p span { color: var(--accent); font-weight: 600; }
+    #start-overlay .click-hint { font-size: 16px; color: #ffe28f; letter-spacing: 0.2em; animation: pulse 1.6s ease infinite; }
+    @keyframes pulse { 50% { opacity: 0.45; } }
+  </style>
+  <script type="module" crossorigin src="/assets/index-DOTbNcf8.js"></script>
+</head>
+<body>
+  <div id="hud">
+    <div id="planet-info" class="panel">
+      <div id="planet-name">Deep Space</div>
+      <div id="planet-type">—</div>
+    </div>
+    <div id="discoveries" class="panel">
+      <div>Discoveries <b id="disc-total">0</b></div>
+      <div id="disc-planet">This planet: 0 / 0</div>
+    </div>
+    <div id="banner">
+      <div class="b-pre">Now entering</div>
+      <div class="b-name"></div>
+      <div class="b-type"></div>
+    </div>
+    <div id="toasts"></div>
+    <div id="log-panel" class="panel">
+      <h2>Discovery Log</h2>
+      <div id="log-entries"><div class="log-empty">Nothing discovered yet. Glowing artifacts await on every planet…</div></div>
+    </div>
+    <div id="controls-hint">
+      <span>WASD</span> move · <span>Space</span> jump / hold to jetpack · <span>Shift</span> boost ·
+      <span>Tab</span> log · <span>N</span> new system · <span>R</span> rescue
+    </div>
+  </div>
+  <div id="start-overlay">
+    <h1>PLANET EXPLORER</h1>
+    <p>
+      A tiny procedural solar system, every world different.<br/>
+      Walk the surface, jetpack into orbit, and discover what grows on each planet.<br/>
+      <span>WASD</span> move · <span>Space</span> jetpack · <span>Shift</span> boost toward distant planets
+    </p>
+    <div class="click-hint">CLICK TO LAUNCH</div>
+  </div>
+</body>
+</html>
